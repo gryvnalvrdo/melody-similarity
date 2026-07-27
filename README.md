@@ -56,7 +56,7 @@ Similar Songs 🎶
 | Pooling | Attention Pooling |
 | Output | 256-dim L2-normalized embedding |
 | Loss | NT-Xent (Temperature = 0.07) |
-| Parameters | ~13M |
+| Parameters | ~4.3M |
 
 ---
 

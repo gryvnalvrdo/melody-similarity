@@ -227,23 +227,40 @@ pip install -r requirements.txt
 > - Linux: `sudo apt install ffmpeg`
 > - macOS: `brew install ffmpeg`
 
-### 3. Prepare Dataset
+### 3. Download & Prepare Dataset
 
-Place your audio files in `dataset/` organized by song ID:
+Use the provided scripts to build the dataset (see [Dataset](#-dataset) section for full details):
+
+```bash
+# Step A: Scrape YouTube URLs from spotify_songs.csv
+python script/scraper.py
+
+# Step B: Download audio files from YouTube
+python script/download_dataset.py
+```
+
+The resulting `dataset/` folder will have this structure:
 ```
 dataset/
-├── song_001/
-│   └── audio.mp3
-├── song_002/
-│   └── audio.mp3
+├── 001/
+│   ├── original.wav    ← original artist recording
+│   ├── cover.wav       ← cover version 1
+│   └── cover_2.wav     ← cover version 2 (if available)
+├── 002/
+│   ├── original.wav
+│   └── cover.wav
 └── ...
 ```
 
-### 4. Extract Features
+### 4. Extract CQT Features
+
+This step separates drums using Demucs, then computes CQT spectrograms for each audio segment and saves them to an HDF5 file:
 
 ```bash
 python script/extract_features.py
 ```
+
+> 💡 Features are stored in `dataset.h5` (not tracked by git due to size). This file is required for training.
 
 ### 5. Train the Model
 
@@ -251,18 +268,32 @@ python script/extract_features.py
 python script/train.py
 ```
 
-Or use the auto-evaluation training:
-```bash
-python script/auto_eval_train.py
-```
+The training uses **NT-Xent contrastive loss** with **Hard Negative Mining** starting from epoch 5. The best model is saved to `models/best_model.pt`.
 
 ### 6. Build Search Index
+
+After training, generate embeddings for all songs and save them into a searchable index:
 
 ```bash
 python script/build_index.py
 ```
 
-### 7. Run the Web App
+This loads `models/best_model.pt`, runs all extracted features through the model, and saves a FAISS-compatible index to the `index/` directory.
+
+### 7. Query — Find Similar Songs
+
+```bash
+# Query using a local audio file
+python script/query.py --input path/to/song.mp3
+
+# Query using a YouTube URL directly
+python script/query.py --input https://youtu.be/xxxx
+
+# Control number of results
+python script/query.py --input path/to/song.mp3 --top-k 20
+```
+
+### 8. Run the Web App
 
 ```bash
 python script/app.py
@@ -304,21 +335,47 @@ Key hyperparameters can be adjusted in [`script/config.py`](script/config.py):
 
 ---
 
-## 🔍 Query Example
+## 🔍 Query — Finding Similar Songs
 
-```python
-from script.query import find_similar_songs
+[`script/query.py`](script/query.py) is the main inference engine. It accepts a local audio file **or** a YouTube URL and returns the most similar songs from the index.
 
-results = find_similar_songs("path/to/query.mp3", top_k=10)
-for song_id, similarity in results:
-    print(f"{song_id}: {similarity:.4f}")
+```bash
+# From a local file
+python script/query.py --input song.mp3
+
+# From a YouTube URL (auto-downloaded)
+python script/query.py --input https://youtu.be/xxxx
+
+# Show top 20 results
+python script/query.py --input song.mp3 --top-k 20
 ```
+
+**How the query pipeline works:**
+1. Load and normalize the audio
+2. Apply Demucs source separation (remove drums)
+3. Compute CQT features on 15-second sliding windows
+4. Run each window through the CRNN model → embedding
+5. Search the FAISS index using **MaxSim** (max similarity across all windows)
+6. Filter results using **consecutive window matching** to reduce false positives
+7. Return ranked list of similar songs with similarity scores
 
 ---
 
 ## 🌐 Web Interface
 
-Upload an audio file (MP3/WAV/M4A) and discover songs with similar melodies in real time.
+[`script/app.py`](script/app.py) is a **Flask** web server that exposes the full query pipeline via a browser UI.
+
+```bash
+python script/app.py
+# Open http://localhost:5000
+```
+
+**Features:**
+- 🎵 **Upload audio** (MP3, WAV, M4A) and find similar songs
+- 🔗 **Paste a YouTube URL** to query directly without downloading
+- 📊 **Real-time progress** tracking during feature extraction
+- 🎯 **Ranked results** with similarity scores and song metadata
+- 🔊 **Session-based** request handling with TTL cleanup
 
 ---
 

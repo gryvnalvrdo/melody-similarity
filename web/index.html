@@ -1,0 +1,2103 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Melody Similarity — Analisis Kemiripan Melodi</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --card: #1e2530;
+      --border: #30363d;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --radius: 12px;
+      --purple: #bc8cff
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 24px 16px
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #58a6ff, #bc8cff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 4px
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: .95rem;
+      margin-bottom: 28px
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto
+    }
+
+    /* Upload zone */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: .2s;
+      background: var(--surface);
+      position: relative
+    }
+
+    .upload-zone:hover,
+    .upload-zone.drag {
+      border-color: var(--accent);
+      background: #1a2130
+    }
+
+    .upload-icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px
+    }
+
+    .upload-zone input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer
+    }
+
+    .upload-zone p {
+      color: var(--muted);
+      font-size: .9rem;
+      margin-top: 6px
+    }
+
+    .file-name {
+      margin-top: 12px;
+      padding: 8px 14px;
+      background: #0d1117;
+      border-radius: 8px;
+      font-size: .85rem;
+      color: var(--accent);
+      display: none;
+      word-break: break-all
+    }
+
+    /* Settings */
+    .settings {
+      display: flex;
+      gap: 16px;
+      margin: 16px 0;
+      flex-wrap: wrap
+    }
+
+    .setting-group {
+      flex: 1;
+      min-width: 160px
+    }
+
+    .setting-group label {
+      display: block;
+      font-size: .8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: .5px
+    }
+
+    .setting-group input[type=range] {
+      width: 100%;
+      accent-color: var(--accent)
+    }
+
+    .setting-val {
+      font-size: .85rem;
+      color: var(--accent);
+      margin-left: 8px;
+      font-weight: 600
+    }
+
+    /* Submit */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: .2s
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #1f6feb, #58a6ff);
+      color: #fff;
+      width: 100%;
+      justify-content: center;
+      font-size: 1.05rem
+    }
+
+    .btn-primary:hover {
+      opacity: .9;
+      transform: translateY(-1px)
+    }
+
+    .btn-primary:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      transform: none
+    }
+
+    /* Loading */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 48px;
+      color: var(--muted)
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .loading-step {
+      font-size: .9rem;
+      margin-top: 10px;
+      color: var(--accent);
+      min-height: 1.4em;
+      transition: opacity .3s
+    }
+
+    .loading-timer {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text);
+      margin: 10px 0 4px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: .04em
+    }
+
+    .loading-timer span {
+      font-size: .85rem;
+      color: var(--muted);
+      font-weight: 400;
+      margin-left: 4px
+    }
+
+    /* Results header */
+    .results-header {
+      margin: 28px 0 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .results-header h2 {
+      font-size: 1.2rem;
+      font-weight: 600
+    }
+
+    .results-header p {
+      font-size: .85rem;
+      color: var(--muted);
+      margin-top: 4px
+    }
+
+    /* Segment card */
+    .seg-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 14px;
+      overflow: hidden;
+      transition: .15s
+    }
+
+    .seg-card:hover {
+      border-color: #30363dcc
+    }
+
+    .seg-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      cursor: pointer;
+      user-select: none
+    }
+
+    .seg-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: .9rem;
+      flex-shrink: 0
+    }
+
+    .seg-badge.found {
+      background: #1a3a1a;
+      color: var(--green)
+    }
+
+    .seg-badge.not-found {
+      background: #2a1a1a;
+      color: var(--red)
+    }
+
+    .seg-info {
+      flex: 1
+    }
+
+    .seg-info h3 {
+      font-size: .95rem;
+      font-weight: 600
+    }
+
+    .seg-info p {
+      font-size: .8rem;
+      color: var(--muted);
+      margin-top: 2px
+    }
+
+    .seg-status {
+      font-size: .8rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600
+    }
+
+    .seg-status.found {
+      background: #1a3a1a;
+      color: var(--green)
+    }
+
+    .seg-status.skipped {
+      background: #2a2200;
+      color: var(--yellow)
+    }
+
+    .chevron {
+      color: var(--muted);
+      transition: .2s;
+      margin-left: 4px
+    }
+
+    .seg-card.open .chevron {
+      transform: rotate(180deg)
+    }
+
+    /* Seg body */
+    .seg-body {
+      display: none;
+      border-top: 1px solid var(--border)
+    }
+
+    .seg-card.open .seg-body {
+      display: block
+    }
+
+    /* Match item */
+    .match-item {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .match-item:last-child {
+      border-bottom: none
+    }
+
+    .match-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px
+    }
+
+    .rank-medal {
+      font-size: 1.3rem
+    }
+
+    .match-title {
+      flex: 1
+    }
+
+    .match-title h4 {
+      font-size: 1rem;
+      font-weight: 600
+    }
+
+    .match-title p {
+      font-size: .8rem;
+      color: var(--muted);
+      margin-top: 2px
+    }
+
+    .ver-tag {
+      display: inline-block;
+      font-size: .7rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+      margin-left: 6px;
+      background: #162032;
+      color: var(--accent)
+    }
+
+    .ver-tag.cover {
+      background: #201620;
+      color: var(--purple)
+    }
+
+    /* Score bars */
+    .scores {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px
+    }
+
+    .score-bar {
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 10px 12px
+    }
+
+    .score-bar label {
+      font-size: .75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .5px
+    }
+
+    .score-bar .val {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin: 2px 0
+    }
+
+    .score-bar .bar-track {
+      height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      margin-top: 6px
+    }
+
+    .score-bar .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: .5s
+    }
+
+    .bar-melody {
+      background: linear-gradient(90deg, #1f6feb, #58a6ff)
+    }
+
+    .bar-embed {
+      background: linear-gradient(90deg, #1a5c2e, #3fb950)
+    }
+
+    /* Score verdict */
+    .verdict {
+      font-size: .82rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 600;
+      display: inline-block;
+      margin-bottom: 10px
+    }
+
+    .verdict.sangat {
+      background: #162032;
+      color: #58a6ff
+    }
+
+    .verdict.mirip {
+      background: #1a3a1a;
+      color: var(--green)
+    }
+
+    .verdict.kurang {
+      background: #2a1a1a;
+      color: var(--red)
+    }
+
+    /* Evidence chips */
+    .evidence-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border)
+    }
+
+    .ev-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: .78rem;
+      font-weight: 600;
+      border: 1px solid transparent
+    }
+
+    .ev-chip.good {
+      background: #1a3a1a;
+      border-color: #1e5a1e;
+      color: var(--green)
+    }
+
+    .ev-chip.warn {
+      background: #2a2200;
+      border-color: #5c4500;
+      color: var(--yellow)
+    }
+
+    .ev-chip.bad {
+      background: #2a1a1a;
+      border-color: #5a1a1a;
+      color: var(--red)
+    }
+
+    .ev-chip.neutral {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--muted)
+    }
+
+    .skipped-section {
+      margin-top: 20px;
+      padding: 14px 0 0;
+      border-top: 1px solid var(--border)
+    }
+
+    .skipped-section h3 {
+      font-size: .95rem;
+      font-weight: 600;
+      color: var(--yellow);
+      margin-bottom: 10px
+    }
+
+    .skipped-list {
+      display: grid;
+      gap: 6px
+    }
+
+    .skipped-item {
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 10px 14px;
+      border-left: 3px solid var(--yellow);
+      font-size: .82rem;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start
+    }
+
+    .skipped-item .sk-num {
+      background: #2a2200;
+      color: var(--yellow);
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-weight: 700;
+      font-size: .8rem;
+      flex-shrink: 0
+    }
+
+    .skipped-item .sk-info strong {
+      color: var(--text);
+      font-size: .85rem;
+      display: block
+    }
+
+    .skipped-item .sk-info p {
+      color: var(--muted);
+      margin-top: 2px
+    }
+
+    /* Warning */
+    .warn-box {
+      background: #201a00;
+      border: 1px solid #5c4500;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      font-size: .82rem;
+      color: #e3b341
+    }
+
+    /* Summary bar */
+    .summary-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap
+    }
+
+    .stat-chip {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      flex: 1;
+      min-width: 100px;
+      text-align: center
+    }
+
+    .stat-chip .num {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--accent)
+    }
+
+    .stat-chip .lbl {
+      font-size: .75rem;
+      color: var(--muted);
+      margin-top: 2px
+    }
+
+    /* ── Song Summary Modal ──────────────────────────────────────────────────── */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .65);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+      animation: backdropIn .2s ease;
+    }
+
+    @keyframes backdropIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    .modal-box {
+      background: linear-gradient(160deg, #111827, #0e1a2a);
+      border: 1.5px solid rgba(88, 166, 255, .25);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 580px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .6);
+      animation: modalIn .22s cubic-bezier(.4, 0, .2, 1);
+      overflow: hidden;
+    }
+
+    @keyframes modalIn {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(.97);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 22px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, .07);
+      flex-shrink: 0;
+    }
+
+    .modal-header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .modal-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .modal-subtitle {
+      font-size: .76rem;
+      color: var(--muted);
+    }
+
+    .modal-close {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, .1);
+      background: rgba(255, 255, 255, .05);
+      color: var(--muted);
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: .15s;
+      flex-shrink: 0;
+    }
+
+    .modal-close:hover {
+      background: rgba(248, 81, 73, .15);
+      border-color: rgba(248, 81, 73, .3);
+      color: var(--red);
+    }
+
+    .modal-body {
+      overflow-y: auto;
+      padding: 18px 22px 22px;
+      flex: 1;
+    }
+
+    .modal-body::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .modal-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .modal-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, .12);
+      border-radius: 3px;
+    }
+
+    .score-entry {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 13px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, .06);
+      animation: fadeSlide .3s ease both;
+    }
+
+    .score-entry:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .score-entry-rank {
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      width: 32px;
+      text-align: center;
+    }
+
+    .score-entry-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .score-entry-title {
+      font-size: .95rem;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .score-entry-artist {
+      font-size: .78rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .score-entry-meter {
+      flex-shrink: 0;
+      width: 148px;
+    }
+
+    .score-entry-pct {
+      font-size: 1.2rem;
+      font-weight: 800;
+      text-align: right;
+      margin-bottom: 4px;
+    }
+
+    .score-entry-bar {
+      height: 6px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .score-entry-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width .7s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    .fill-high {
+      background: linear-gradient(90deg, #1f6feb, #58a6ff);
+    }
+
+    .fill-mid {
+      background: linear-gradient(90deg, #2a6e3e, #3fb950);
+    }
+
+    .fill-low {
+      background: linear-gradient(90deg, #7a3b00, #d29922);
+    }
+
+    .score-entry-chips {
+      display: flex;
+      gap: 5px;
+      margin-top: 5px;
+      flex-wrap: wrap;
+    }
+
+    .ss-chip {
+      font-size: .67rem;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: rgba(88, 166, 255, .12);
+      border: 1px solid rgba(88, 166, 255, .2);
+      color: var(--accent);
+    }
+
+    .ss-chip.chip-warn {
+      background: rgba(210, 153, 34, .12);
+      border-color: rgba(210, 153, 34, .25);
+      color: var(--yellow);
+    }
+
+    .ss-chip.chip-ok {
+      background: rgba(63, 185, 80, .12);
+      border-color: rgba(63, 185, 80, .25);
+      color: var(--green);
+    }
+
+    /* Ringkasan button — sits next to Cari Lagi */
+    .btn-summary {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid rgba(88, 166, 255, .35);
+      background: linear-gradient(135deg, rgba(31, 111, 235, .15), rgba(88, 166, 255, .1));
+      color: var(--accent);
+      transition: .2s;
+      box-shadow: 0 2px 8px rgba(88, 166, 255, .08);
+    }
+
+    .btn-summary:hover {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, rgba(31, 111, 235, .28), rgba(88, 166, 255, .18));
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(88, 166, 255, .18);
+    }
+
+    .btn-summary:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ── Score entry accordion ─────────────────────────────────────────────── */
+    .score-entry-wrap {
+      border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+
+    .score-entry-wrap:last-child {
+      border-bottom: none;
+    }
+
+    /* override border on individual entries since wrap handles it */
+    .score-entry-wrap .score-entry {
+      border-bottom: none;
+      padding-bottom: 10px;
+    }
+
+    .detail-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 6px;
+      padding: 3px 9px;
+      cursor: pointer;
+      transition: .15s;
+      margin-top: 6px;
+      margin-bottom: 2px;
+    }
+
+    .detail-toggle:hover {
+      background: rgba(88,166,255,.1);
+      border-color: rgba(88,166,255,.25);
+      color: var(--accent);
+    }
+
+    .detail-toggle .dt-arrow {
+      display: inline-block;
+      transition: transform .2s;
+      font-style: normal;
+    }
+
+    .detail-toggle.open .dt-arrow {
+      transform: rotate(180deg);
+    }
+
+    .seg-detail-panel {
+      display: none;
+      background: rgba(255,255,255,.025);
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .seg-detail-panel.open {
+      display: block;
+      animation: fadeSlide .18s ease;
+    }
+
+    .seg-detail-header {
+      display: grid;
+      grid-template-columns: 1fr 72px 60px;
+      gap: 8px;
+      padding: 7px 12px;
+      background: rgba(255,255,255,.04);
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      font-size: .68rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+
+    .seg-detail-row {
+      display: grid;
+      grid-template-columns: 1fr 72px 60px;
+      gap: 8px;
+      padding: 7px 12px;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+      font-size: .78rem;
+      align-items: center;
+    }
+
+    .seg-detail-row:last-child {
+      border-bottom: none;
+    }
+
+    .seg-detail-row:hover {
+      background: rgba(255,255,255,.03);
+    }
+
+    .sdr-time {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .sdr-rank {
+      text-align: center;
+    }
+
+    .sdr-score {
+      text-align: right;
+      font-weight: 700;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: .2s;
+      font-size: .95rem
+    }
+
+    .tab-btn.tab-active {
+      border: 2px solid var(--accent);
+      background: #162032;
+      color: var(--accent)
+    }
+
+    .tab-btn.tab-inactive {
+      border: 2px solid var(--border);
+      background: var(--surface);
+      color: var(--muted)
+    }
+
+    /* ── Query info box (YouTube) ─────────────────────────────────────────────── */
+    .query-info-box {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: linear-gradient(135deg, #0f1e30, #101c28);
+      border: 1.5px solid rgba(88, 166, 255, .2);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 12px rgba(88, 166, 255, .06);
+    }
+
+    .query-info-icon {
+      font-size: 1.6rem;
+      flex-shrink: 0
+    }
+
+    .query-info-label {
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--muted);
+      margin-bottom: 3px
+    }
+
+    .query-info-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text)
+    }
+
+    .query-info-artist {
+      font-size: .82rem;
+      color: var(--accent);
+      margin-top: 2px
+    }
+
+    /* Segment query time label */
+    .seg-query-label {
+      font-size: .7rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid rgba(255, 255, 255, .1);
+      padding: 1px 7px;
+      border-radius: 10px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    .seg-match-hint {
+      font-size: .8rem;
+      color: var(--muted);
+      margin-top: 3px
+    }
+
+    .seg-match-hint strong {
+      color: var(--text)
+    }
+
+    /* Match flow comparison row */
+    .match-flow {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      background: rgba(255, 255, 255, .025);
+      border: 1px solid rgba(255, 255, 255, .07);
+      border-radius: 9px;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+
+    .flow-col {
+      flex: 1;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .flow-col.flow-query {
+      background: rgba(88, 166, 255, .06);
+      border-right: 1px solid rgba(88, 166, 255, .1)
+    }
+
+    .flow-col.flow-match {
+      background: rgba(188, 140, 255, .06)
+    }
+
+    .flow-col-label {
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      font-weight: 700;
+    }
+
+    .flow-col.flow-query .flow-col-label {
+      color: var(--accent)
+    }
+
+    .flow-col.flow-match .flow-col-label {
+      color: var(--purple)
+    }
+
+    .flow-col-song {
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .flow-col-time {
+      font-size: .78rem;
+      color: var(--muted)
+    }
+
+    .flow-divider {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 10px;
+      flex-shrink: 0;
+      font-size: .75rem;
+      color: var(--muted);
+      font-weight: 700;
+      background: rgba(255, 255, 255, .02);
+    }
+
+    /* ── Play Compare Button ─────────────────────────────────────────────────── */
+    .btn-play {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid rgba(88, 166, 255, .35);
+      background: linear-gradient(135deg, rgba(31, 111, 235, .15), rgba(88, 166, 255, .1));
+      color: var(--accent);
+      transition: .2s;
+      margin-top: 12px;
+      box-shadow: 0 2px 8px rgba(88, 166, 255, .08);
+    }
+
+    .btn-play:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, rgba(31, 111, 235, .28), rgba(88, 166, 255, .18));
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(88, 166, 255, .18);
+    }
+
+    .btn-play:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none
+    }
+
+    .btn-play .play-spinner {
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(88, 166, 255, .3);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .75s linear infinite;
+      display: none;
+    }
+
+    .btn-play.loading .play-spinner {
+      display: inline-block
+    }
+
+    .btn-play.loading .play-icon {
+      display: none
+    }
+
+    /* ── Dual Audio Player Panel ─────────────────────────────────────────────── */
+    .compare-panel {
+      display: none;
+      margin-top: 14px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1.5px solid rgba(88, 166, 255, .2);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, .35);
+      animation: fadeSlide .25s ease;
+    }
+
+    @keyframes fadeSlide {
+      from {
+        opacity: 0;
+        transform: translateY(-6px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .compare-panel.visible {
+      display: block
+    }
+
+    .compare-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #0f1e30, #13222e);
+      border-bottom: 1px solid rgba(88, 166, 255, .15);
+      font-size: .88rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .compare-panel-header .cph-icon {
+      font-size: 1.1rem;
+    }
+
+    .compare-tracks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0
+    }
+
+    /* Query track — blue tint */
+    .compare-track.track-query {
+      padding: 16px 18px;
+      background: linear-gradient(160deg, #0d1e30 0%, #101c28 100%);
+      border-right: 1px solid rgba(88, 166, 255, .12);
+    }
+
+    /* Match track — purple tint */
+    .compare-track.track-match {
+      padding: 16px 18px;
+      background: linear-gradient(160deg, #160d26 0%, #120d22 100%);
+    }
+
+    .track-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px
+    }
+
+    .ct-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+    }
+
+    .ct-badge.query-badge {
+      background: rgba(88, 166, 255, .15);
+      border: 1px solid rgba(88, 166, 255, .3);
+      color: var(--accent);
+    }
+
+    .ct-badge.match-badge {
+      background: rgba(188, 140, 255, .15);
+      border: 1px solid rgba(188, 140, 255, .3);
+      color: var(--purple);
+    }
+
+    .compare-track-title {
+      font-size: .92rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 2px;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .compare-track-time {
+      font-size: .75rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Custom audio player wrapper */
+    .audio-wrapper {
+      background: rgba(255, 255, 255, .04);
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 8px;
+      padding: 10px 12px;
+      position: relative;
+    }
+
+    .compare-track.track-query .audio-wrapper {
+      border-color: rgba(88, 166, 255, .2)
+    }
+
+    .compare-track.track-match .audio-wrapper {
+      border-color: rgba(188, 140, 255, .2)
+    }
+
+    .audio-wrapper audio {
+      width: 100%;
+      height: 32px;
+      border-radius: 6px;
+      outline: none;
+      /* Force light controls on all browsers */
+      color-scheme: dark;
+    }
+
+    .compare-error {
+      padding: 14px 18px;
+      font-size: .83rem;
+      color: var(--red);
+      background: #2a0e0e;
+      border-top: 1px solid rgba(248, 81, 73, .15);
+    }
+
+    /* Responsive */
+    @media(max-width:600px) {
+      .compare-tracks {
+        grid-template-columns: 1fr
+      }
+
+      .compare-track.track-query {
+        border-right: none;
+        border-bottom: 1px solid rgba(88, 166, 255, .1)
+      }
+    }
+
+    @media(max-width:500px) {
+      .scores {
+        grid-template-columns: 1fr
+      }
+
+      .settings {
+        flex-direction: column
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>🎼 Melody Similarity</h1>
+    <p class="subtitle">Upload audio, sistem akan mendeteksi nada dan mencari lagu yang melodinya mirip di database.</p>
+
+    <!-- Input tabs -->
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button id="tabFile" class="tab-btn tab-active" onclick="setTab('file')">📁 File Audio</button>
+      <button id="tabUrl" class="tab-btn tab-inactive" onclick="setTab('url')">▶ Link YouTube</button>
+    </div>
+
+    <!-- File upload -->
+    <div id="paneFile">
+      <div class="upload-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".mp3,.wav,.flac,.m4a,.ogg,.aac,.opus,.wma">
+        <div class="upload-icon">🎵</div>
+        <div style="font-size:1rem;font-weight:600">Klik atau seret file audio ke sini</div>
+        <p>Format: MP3 · WAV · FLAC · M4A · OGG · AAC</p>
+        <div class="file-name" id="fileName"></div>
+      </div>
+    </div>
+
+    <!-- YouTube URL -->
+    <div id="paneUrl" style="display:none">
+      <div
+        style="background:var(--surface);border:2px dashed var(--border);border-radius:var(--radius);padding:24px 20px">
+        <div style="font-size:1rem;font-weight:600;margin-bottom:10px">▶ Masukkan link YouTube</div>
+        <input id="ytUrl" type="url" placeholder="https://youtu.be/..."
+          style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:#0d1117;color:var(--text);font-size:.95rem;outline:none">
+        <p style="color:var(--muted);font-size:.82rem;margin-top:8px">Audio akan didownload otomatis sebelum dianalisis.
+        </p>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="settings" style="margin-top:16px">
+      <div class="setting-group">
+        <label>Min. Skor Kemiripan <span class="setting-val" id="minScoreVal">70%</span></label>
+        <input type="range" id="minScore" min="30" max="90" value="70" step="5">
+      </div>
+      <div class="setting-group">
+        <label>Top Hasil per Segmen <span class="setting-val" id="topKVal">5</span></label>
+        <input type="range" id="topK" min="1" max="10" value="5" step="1">
+      </div>
+      <div class="setting-group">
+        <label>Perangkat (Device)</label>
+        <select id="deviceSelect"
+          style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:#0d1117;color:var(--text);font-size:.95rem;outline:none;margin-top:2px;cursor:pointer">
+          <option value="auto">Auto (GPU jika ada)</option>
+          <option value="gpu">GPU (CUDA)</option>
+          <option value="cpu">CPU</option>
+        </select>
+        <div id="deviceHint" style="font-size:0.8rem;margin-top:6px;line-height:1.3;min-height:16px"></div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="submitBtn" disabled onclick="submitQuery()">
+      <span id="btnIcon">🔍</span> <span id="btnText">Pilih file untuk mulai</span>
+    </button>
+
+    <!-- Loading -->
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div>Sedang menganalisis audio…</div>
+      <div class="loading-timer" id="loadTimer">0:00<span>detik</span></div>
+      <div class="loading-step" id="loadStep">Mempersiapkan…</div>
+    </div>
+
+    <!-- Error Banner -->
+    <div id="errorBanner"
+      style="display:none;background:#2a0e0e;border:1px solid var(--red);border-radius:8px;padding:14px 18px;margin-top:16px">
+      <div style="color:var(--red);font-weight:600;margin-bottom:6px">❌ Terjadi kesalahan</div>
+      <div id="errorMsg" style="font-size:.85rem;color:#e6edf3"></div>
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;font-size:.75rem;color:var(--muted)">Detail teknis</summary>
+        <pre id="errorTb"
+          style="font-size:.7rem;color:var(--muted);overflow:auto;margin-top:6px;white-space:pre-wrap"></pre>
+      </details>
+    </div>
+
+    <!-- Song Summary Modal -->
+    <div class="modal-backdrop" id="summaryModal" onclick="closeSummaryModal(event)">
+      <div class="modal-box">
+        <div class="modal-header">
+          <div class="modal-header-left">
+            <div class="modal-title">📊 Ringkasan Kemiripan Lagu</div>
+            <div class="modal-subtitle" id="modalSubtitle"></div>
+          </div>
+          <button class="modal-close" onclick="closeSummaryModal()" title="Tutup">✕</button>
+        </div>
+        <div class="modal-body" id="summaryModalBody"></div>
+      </div>
+    </div>
+
+    <div id="results" style="display:none">
+      <div class="results-header">
+        <h2 id="resultsTitle">Hasil Analisis</h2>
+        <p id="resultsSubtitle"></p>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="resetForm()"
+          style="background:linear-gradient(135deg,#2d333b,#444c56);max-width:220px;font-size:.9rem;padding:10px 20px">🔄
+          Cari Lagi</button>
+        <button class="btn-summary" id="summaryBtn" onclick="openSummaryModal()" disabled>📊 Ringkasan Lagu</button>
+      </div>
+      <div id="warnBox"></div>
+      <div class="summary-bar" id="summaryBar"></div>
+      <div id="segCards"></div>
+      <div class="skipped-section" id="skippedSection" style="display:none">
+        <h3>⏭ Segmen Tanpa Kecocokan</h3>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">Segmen-segmen ini tidak ditemukan lagu yang
+          cocok ≥ threshold. Bisa karena bagian instrumental, batas antar bagian lagu, atau model tidak yakin.</p>
+        <div class="skipped-list" id="skippedList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MEDALS = ['🥇', '🥈', '🥉', '4.', '5.', '6.', '7.', '8.', '9.', '10.'];
+
+    // Global session id from last query
+    let _sessionId = null;
+    let _queryFileName = '(audio yang diupload)';
+    let _queryTitle = '';   // YouTube video title (empty for file uploads)
+    let _queryArtist = '';   // YouTube uploader
+
+    // Range inputs
+    ['minScore', 'topK'].forEach(id => {
+      const el = document.getElementById(id), val = document.getElementById(id + 'Val');
+      const fmt = v => id === 'minScore' ? v + '%' : v;
+      el.oninput = () => { val.textContent = fmt(el.value) };
+    });
+
+    // Device hint logic
+    let _hasGpu = false;
+    function updateDeviceHint() {
+      const v = document.getElementById('deviceSelect').value;
+      const hint = document.getElementById('deviceHint');
+      if (v === 'auto') {
+        if (_hasGpu) hint.innerHTML = '<span style="color:var(--green)">✓ GPU terdeteksi, pemrosesan akan dipercepat.</span>';
+        else hint.innerHTML = '<span style="color:var(--yellow)">⚠️ GPU tidak terdeteksi, fallback ke pemrosesan CPU.</span>';
+      } else if (v === 'gpu') {
+        if (_hasGpu) hint.innerHTML = '<span style="color:var(--green)">✓ Memaksa pemrosesan menggunakan GPU.</span>';
+        else hint.innerHTML = '<span style="color:var(--red)">❌ GPU tidak terdeteksi! Proses akan gagal.</span>';
+      } else {
+        hint.innerHTML = '<span style="color:var(--muted)">Memaksa pemrosesan menggunakan CPU.</span>';
+      }
+    }
+    document.getElementById('deviceSelect').addEventListener('change', updateDeviceHint);
+
+    fetch('/api/check_gpu')
+      .then(r => r.json())
+      .then(d => {
+        _hasGpu = d.has_gpu;
+        updateDeviceHint();
+      })
+      .catch(e => {
+        document.getElementById('deviceHint').innerHTML = '<span style="color:var(--muted)">Gagal mengecek ketersediaan GPU server.</span>';
+      });
+
+    // File input
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileNameEl = document.getElementById('fileName');
+    const submitBtn = document.getElementById('submitBtn');
+    let selectedFile = null;
+
+    function onFile(f) {
+      selectedFile = f;
+      _queryFileName = f.name;
+      fileNameEl.textContent = '📎 ' + f.name;
+      fileNameEl.style.display = 'block';
+      submitBtn.disabled = false;
+      document.getElementById('btnText').textContent = 'Analisis Sekarang';
+    }
+    fileInput.onchange = e => e.target.files[0] && onFile(e.target.files[0]);
+    dropZone.ondragover = e => { e.preventDefault(); dropZone.classList.add('drag') };
+    dropZone.ondragleave = () => dropZone.classList.remove('drag');
+    dropZone.ondrop = e => {
+      e.preventDefault(); dropZone.classList.remove('drag');
+      const f = e.dataTransfer.files[0];
+      if (f) onFile(f);
+    };
+
+    // Score helpers
+    function scoreClass(pct) { return pct >= 80 ? 'sangat' : pct >= 60 ? 'mirip' : 'kurang'; }
+    function scoreLabel(pct) { return pct >= 80 ? '🔥 Sangat Mirip' : pct >= 60 ? '✅ Mirip' : '⚠️ Kurang Mirip'; }
+    function scoreColor(pct) { return pct >= 80 ? 'var(--accent)' : pct >= 60 ? 'var(--green)' : 'var(--red)'; }
+
+    // Tab toggle
+    let inputMode = 'file';
+    let isAnalyzing = false;
+    function setTab(mode) {
+      if (isAnalyzing) return;
+      inputMode = mode;
+      document.getElementById('paneFile').style.display = mode === 'file' ? 'block' : 'none';
+      document.getElementById('paneUrl').style.display = mode === 'url' ? 'block' : 'none';
+      document.getElementById('tabFile').className = 'tab-btn ' + (mode === 'file' ? 'tab-active' : 'tab-inactive');
+      document.getElementById('tabUrl').className = 'tab-btn ' + (mode === 'url' ? 'tab-active' : 'tab-inactive');
+      submitBtn.disabled = mode === 'file' ? !selectedFile : !(document.getElementById('ytUrl').value.trim());
+      if (mode === 'url') document.getElementById('btnText').textContent =
+        document.getElementById('ytUrl').value.trim() ? 'Analisis Sekarang' : 'Masukkan link dahulu';
+      else document.getElementById('btnText').textContent = selectedFile ? 'Analisis Sekarang' : 'Pilih file untuk mulai';
+    }
+    document.getElementById('ytUrl').oninput = e => {
+      if (isAnalyzing) return;
+      submitBtn.disabled = !e.target.value.trim();
+      document.getElementById('btnText').textContent = e.target.value.trim() ? 'Analisis Sekarang' : 'Masukkan link dahulu';
+    };
+
+    // ── Play Compare Logic ───────────────────────────────────────────────────────
+    /**
+     * Called when user clicks ▶ Putar Perbandingan on a match item.
+     * btn        : the button element
+     * panelId    : id of the .compare-panel div to show
+     * sessionId  : from last query result
+     * qStart/qEnd: query segment time range
+     * songId, version, mStart, mEnd : match info
+     * queryTitle : display name for query
+     * matchTitle : display name for match
+     */
+    async function playCompare(btn, panelId, sessionId, qStart, qEnd, songId, version, mStart, mEnd, queryTitle, matchTitle) {
+      const panel = document.getElementById(panelId);
+      if (!panel) return;
+
+      // If panel is already visible and loaded, just toggle visibility
+      if (panel.classList.contains('visible') && panel.dataset.loaded === '1') {
+        panel.classList.toggle('visible');
+        return;
+      }
+
+      // Show loading state
+      btn.disabled = true;
+      btn.classList.add('loading');
+      btn.querySelector('.play-text').textContent = 'Mengunduh audio…';
+
+      const url = `/api/play_compare?session_id=${encodeURIComponent(sessionId)}`
+        + `&q_start=${qStart}&q_end=${qEnd}`
+        + `&song_id=${encodeURIComponent(songId)}`
+        + `&version=${encodeURIComponent(version)}`
+        + `&m_start=${mStart}&m_end=${mEnd}`;
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          panel.innerHTML = `<div class="compare-error">❌ ${data.error || 'Gagal mengunduh audio.'}</div>`;
+          panel.classList.add('visible');
+          return;
+        }
+
+        // Build HTML
+        const fmtTime = s => { const t = Math.round(s); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+        const qRange = `${fmtTime(data.q_start)} – ${fmtTime(data.q_end)}`;
+        const mRange = `${fmtTime(data.m_start)} – ${fmtTime(data.m_end)}`;
+
+        const queryPlayer = data.query_audio_b64
+          ? `<div class="audio-wrapper"><audio controls preload="metadata" src="data:audio/wav;base64,${data.query_audio_b64}"></audio></div>`
+          : `<div class="audio-wrapper" style="color:var(--muted);font-size:.82rem;padding:12px">⚠️ Audio query tidak tersedia untuk sesi ini</div>`;
+
+        const matchPlayer = data.match_audio_b64
+          ? `<div class="audio-wrapper"><audio controls preload="metadata" src="data:audio/wav;base64,${data.match_audio_b64}"></audio></div>`
+          : `<div class="audio-wrapper" style="color:var(--muted);font-size:.82rem;padding:12px">⚠️ Gagal mengunduh dari YouTube — coba lagi</div>`;
+
+        panel.innerHTML = `
+      <div class="compare-panel-header">
+        <span class="cph-icon">🎧</span>
+        <span>Perbandingan Audio</span>
+      </div>
+      <div class="compare-tracks">
+        <div class="compare-track track-query">
+          <div class="track-header">
+            <span class="ct-badge query-badge">▶ Query</span>
+          </div>
+          <div class="compare-track-title" title="${queryTitle}">${queryTitle}</div>
+          <div class="compare-track-time">⏱ ${qRange}</div>
+          ${queryPlayer}
+        </div>
+        <div class="compare-track track-match">
+          <div class="track-header">
+            <span class="ct-badge match-badge">🎵 Match</span>
+          </div>
+          <div class="compare-track-title" title="${matchTitle}">${matchTitle}</div>
+          <div class="compare-track-time">⏱ ${mRange}</div>
+          ${matchPlayer}
+        </div>
+      </div>`;
+
+        panel.dataset.loaded = '1';
+        panel.classList.add('visible');
+
+      } catch (e) {
+        panel.innerHTML = `<div class="compare-error">❌ Koneksi gagal: ${e.message}</div>`;
+        panel.classList.add('visible');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        btn.querySelector('.play-text').textContent = panel.classList.contains('visible') ? 'Sembunyikan' : '▶ Putar Perbandingan';
+      }
+    }
+
+    // ── Render one match ─────────────────────────────────────────────────────────
+    let _matchCounter = 0;  // unique id generator for panels
+
+    function renderMatch(m, seg) {
+      const embPct = m.embed_pct;
+      const vc = scoreClass(embPct), vl = scoreLabel(embPct);
+      const medal = MEDALS[m.rank - 1] || m.rank + '.';
+
+      const panelId = `cmp-panel-${++_matchCounter}`;
+      const btnId = `cmp-btn-${_matchCounter}`;
+
+      // Display names
+      const qDisplayName = _queryTitle || _queryFileName.replace(/\.[^.]+$/, '') || 'Lagu Input';
+      const matchTitle = `${m.title} (${m.artist})`;
+
+      const onclickStr = `playCompare(document.getElementById('${btnId}'),'${panelId}',_sessionId,${seg.start},${seg.end},'${m.song_id}','${m.version}',${m.m_start},${m.m_end},\`${qDisplayName.replace(/`/g, "'")}\`,\`${matchTitle.replace(/`/g, "'")}\`)`;
+
+      return `
+  <div class="match-item">
+    <!-- Flow comparison row: makes it crystal clear which is query vs match -->
+    <div class="match-flow">
+      <div class="flow-col flow-query">
+        <span class="flow-col-label">🎤 Lagu yang diinput</span>
+        <span class="flow-col-song" title="${qDisplayName}">${qDisplayName}</span>
+        <span class="flow-col-time">⏱ ${seg.time_label}</span>
+      </div>
+      <div class="flow-divider">↔<br><span style="font-size:.62rem;font-weight:400">mirip</span></div>
+      <div class="flow-col flow-match">
+        <span class="flow-col-label">🎵 Lagu yang terdeteksi</span>
+        <span class="flow-col-song" title="${m.title}">${m.title}</span>
+        <span class="flow-col-time">⏱ ${m.m_time}</span>
+      </div>
+    </div>
+    <div class="match-header">
+      <span class="rank-medal">${medal}</span>
+      <div class="match-title">
+        <h4>${m.title}<span class="ver-tag ${m.version}">${m.ver_label}</span></h4>
+        <p>🎤 ${m.artist} &nbsp;·&nbsp; ⏱ ${m.m_time}</p>
+      </div>
+    </div>
+    <span class="verdict ${vc}">${vl}</span>
+    <div class="scores" style="grid-template-columns:1fr">
+      <div class="score-bar">
+        <label>Skor Kemiripan (Embedding Neural Network)</label>
+        <div class="val" style="color:${scoreColor(embPct)}">${embPct}%</div>
+        <div class="bar-track"><div class="bar-fill bar-embed" style="width:${embPct}%"></div></div>
+      </div>
+    </div>
+    <button class="btn-play" id="${btnId}" onclick="${onclickStr}">
+      <span class="play-spinner"></span>
+      <span class="play-icon">▶</span>
+      <span class="play-text">Putar Perbandingan</span>
+    </button>
+    <div class="compare-panel" id="${panelId}"></div>
+  </div>`;
+    }
+
+    // ── Song Summary Modal logic ──────────────────────────────────────────────────
+    let _summaryData = null; // cached result data for modal
+
+    /**
+     * Pre-computes song summary from result data and stores it.
+     * Enables the Ringkasan button.
+     */
+    function buildSongSummary(data) {
+      _summaryData = data;
+      const btn = document.getElementById('summaryBtn');
+      const totalSegs = data.total_segments || 0;
+      const hasMatches = (data.segments || []).some(s => s.matches && s.matches.length > 0);
+      if (btn) btn.disabled = !hasMatches;
+    }
+
+    function openSummaryModal() {
+      if (!_summaryData) return;
+      const data = _summaryData;
+      const totalSegs = data.total_segments || 0;
+
+      // ── Accumulate per song_id — ALL segments, ALL ranks, with per-seg detail ──
+      const songMap = {};
+      (data.segments || []).forEach(seg => {
+        (seg.matches || []).forEach(m => {
+          const key = m.song_id;
+          if (!songMap[key]) {
+            songMap[key] = {
+              title: m.title, artist: m.artist,
+              version: m.version, ver_label: m.ver_label,
+              matchedSegs: new Set(), scores: [], ranks: [],
+              segDetails: [],          // [{seg_id, time_label, rank, embed_pct}]
+            };
+          }
+          const e = songMap[key];
+          if (!e.matchedSegs.has(seg.seg_id)) {
+            e.matchedSegs.add(seg.seg_id);
+            e.scores.push(m.embed_pct);
+            // First (best-rank) match for this segment
+            e.segDetails.push({
+              seg_id:     seg.seg_id,
+              time_label: seg.time_label,
+              rank:       m.rank,
+              embed_pct:  m.embed_pct,
+            });
+          }
+          e.ranks.push(m.rank);
+        });
+      });
+
+      const entries = Object.values(songMap).map(e => {
+        const n = e.matchedSegs.size;
+        const coverage = n / totalSegs * 100;
+        const avgScore = e.scores.reduce((a, b) => a + b, 0) / Math.max(e.scores.length, 1);
+        const uniqueRanks = [...new Set(e.ranks)].sort((a, b) => a - b);
+        // Sort seg details by seg_id for readability
+        const segDetails = e.segDetails.slice().sort((a, b) => a.seg_id - b.seg_id);
+        return { ...e, n, coverage, avgScore, uniqueRanks, segDetails };
+      }).sort((a, b) => b.coverage - a.coverage || b.avgScore - a.avgScore);
+
+      const RANK_MEDALS = ['🥇','🥈','🥉','4.','5.'];
+
+      const rows = entries.slice(0, 5).map((e, i) => {
+        const medal   = RANK_MEDALS[i] || `${i+1}.`;
+        const pct     = Math.round(e.coverage);
+        const avgPct  = Math.round(e.avgScore);
+        const fillClass = pct >= 50 ? 'fill-high' : pct >= 25 ? 'fill-mid' : 'fill-low';
+        const pctColor  = pct >= 50 ? 'var(--accent)' : pct >= 25 ? 'var(--green)' : 'var(--yellow)';
+
+        const covChip  = `<span class="ss-chip ${pct >= 50 ? 'chip-ok' : pct >= 25 ? '' : 'chip-warn'}">${e.n}/${totalSegs} segmen</span>`;
+        const rankStr  = e.uniqueRanks.slice(0, 5).map(r => `#${r}`).join(', ');
+        const rankChip = `<span class="ss-chip">Rank ${rankStr}</span>`;
+        const verChip  = e.ver_label ? `<span class="ss-chip">${e.ver_label}</span>` : '';
+
+        const panelId  = `detail-panel-${i}`;
+        const toggleId = `detail-toggle-${i}`;
+
+        // Per-segment detail rows
+        const detailRows = e.segDetails.map(d => {
+          const sc = d.embed_pct >= 80 ? 'var(--accent)' : d.embed_pct >= 70 ? 'var(--green)' : 'var(--yellow)';
+          const rankBadge = d.rank === 1
+            ? `<span style="color:var(--accent);font-weight:700">#${d.rank} 🥇</span>`
+            : d.rank === 2
+            ? `<span style="color:var(--muted)">#${d.rank} 🥈</span>`
+            : `<span style="color:var(--muted)">#${d.rank}</span>`;
+          return `
+          <div class="seg-detail-row">
+            <span class="sdr-time">⏱ ${d.time_label}</span>
+            <span class="sdr-rank">${rankBadge}</span>
+            <span class="sdr-score" style="color:${sc}">${Math.round(d.embed_pct)}%</span>
+          </div>`;
+        }).join('');
+
+        return `
+        <div class="score-entry-wrap" style="animation-delay:${i * 0.07}s">
+          <div class="score-entry">
+            <div class="score-entry-rank">${medal}</div>
+            <div class="score-entry-info">
+              <div class="score-entry-title">${e.title}</div>
+              <div class="score-entry-artist">🎤 ${e.artist}</div>
+              <div class="score-entry-chips">${covChip}${rankChip}${verChip}</div>
+              <button class="detail-toggle" id="${toggleId}" onclick="toggleDetail('${panelId}','${toggleId}')">
+                <i class="dt-arrow">▾</i> Detail segmen
+              </button>
+            </div>
+            <div class="score-entry-meter">
+              <div class="score-entry-pct" style="color:${pctColor}">${pct}%
+                <span style="font-size:.68rem;font-weight:400;color:var(--muted)"> coverage</span>
+              </div>
+              <div class="score-entry-bar">
+                <div class="score-entry-fill ${fillClass}" style="width:${pct}%"></div>
+              </div>
+              <div style="font-size:.7rem;color:var(--muted);margin-top:4px;text-align:right">avg: ${avgPct}%</div>
+            </div>
+          </div>
+          <div class="seg-detail-panel" id="${panelId}">
+            <div class="seg-detail-header">
+              <span>Segmen (waktu)</span>
+              <span style="text-align:center">Rank</span>
+              <span style="text-align:right">Skor</span>
+            </div>
+            ${detailRows}
+          </div>
+        </div>`;
+      }).join('');
+
+      const qName = (data.query_title || _queryFileName.replace(/\.[^.]+$/, '') || 'Lagu Input').replace(/</g, '&lt;');
+      document.getElementById('modalSubtitle').innerHTML =
+        `Lagu: "<strong>${qName}</strong>" · ${totalSegs} segmen · semua rank`;
+      document.getElementById('summaryModalBody').innerHTML =
+        entries.length === 0
+          ? '<div style="text-align:center;padding:32px;color:var(--muted)">Belum ada kecocokan.</div>'
+          : rows;
+
+      document.getElementById('summaryModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeSummaryModal(e) {
+      // Close if clicking backdrop (outside modal-box) or the close button
+      if (e && e.target !== document.getElementById('summaryModal')) return;
+      document.getElementById('summaryModal').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    // Close with Escape key
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeSummaryModal();
+    });
+
+    function toggleDetail(panelId, toggleId) {
+      const panel  = document.getElementById(panelId);
+      const toggle = document.getElementById(toggleId);
+      if (!panel || !toggle) return;
+      const isOpen = panel.classList.toggle('open');
+      toggle.classList.toggle('open', isOpen);
+      // Update text node label
+      for (const node of toggle.childNodes) {
+        if (node.nodeType === 3 && node.textContent.trim()) {
+          node.textContent = isOpen ? ' Sembunyikan' : ' Detail segmen';
+          break;
+        }
+      }
+    }
+
+    // ── Render results ───────────────────────────────────────────────────────────
+    function renderResults(data) {
+      _sessionId = data.session_id || null;
+      _queryTitle = data.query_title || '';
+      _queryArtist = data.query_artist || '';
+      _matchCounter = 0;
+
+      document.getElementById('results').style.display = 'block';
+      document.getElementById('resultsTitle').textContent =
+        'Hasil Analisis' + (data.query_key && data.query_key !== 'Unknown' ? ` — Kunci: ${data.query_key}` : '');
+      document.getElementById('resultsSubtitle').textContent =
+        `${data.total_segments} segmen dianalisis · ${data.matched_segments} segmen ditemukan kecocokan`;
+
+      const SKIP_WARN = /kunci nada tidak terdeteksi|key.*not.*confident|confidence.*rendah/i;
+      const wb = document.getElementById('warnBox');
+      const filteredWarns = (data.warnings || []).filter(w => !SKIP_WARN.test(w));
+
+      // YouTube query info box
+      let queryInfoHtml = '';
+      if (_queryTitle) {
+        queryInfoHtml = `
+      <div class="query-info-box">
+        <span class="query-info-icon">🎥</span>
+        <div>
+          <div class="query-info-label">Lagu yang sedang dianalisis</div>
+          <div class="query-info-title">${_queryTitle}</div>
+          ${_queryArtist ? `<div class="query-info-artist">🎤 ${_queryArtist}</div>` : ''}
+        </div>
+      </div>`;
+      }
+
+      wb.innerHTML = queryInfoHtml
+        + (filteredWarns.length ? filteredWarns.map(w => `<div class="warn-box">⚠️ ${w}</div>`).join('') : '');
+
+      document.getElementById('summaryBar').innerHTML = `
+    <div class="stat-chip"><div class="num">${data.total_segments}</div><div class="lbl">Total Segmen</div></div>
+    <div class="stat-chip"><div class="num" style="color:var(--green)">${data.matched_segments}</div><div class="lbl">Ada Kecocokan</div></div>
+    <div class="stat-chip"><div class="num" style="color:var(--yellow)">${(data.skipped_segments || []).length}</div><div class="lbl">Di bawah threshold</div></div>
+    <div class="stat-chip"><div class="num" style="font-size:1.1rem">${data.query_key || '—'}</div><div class="lbl">Kunci Nada</div></div>
+    ${data.query_bpm && data.query_bpm > 0
+          ? `<div class="stat-chip"><div class="num" style="font-size:1.2rem">${Math.round(data.query_bpm)}</div><div class="lbl">BPM Audio</div></div>`
+          : ''}
+    ${data.timing_sec
+          ? `<div class="stat-chip"><div class="num" style="font-size:1.1rem;color:var(--accent)">${data.timing_sec.total_sec || 0}s</div><div class="lbl">Waktu (${data.device_label || 'Auto'})</div></div>`
+          : ''}`;
+
+      buildSongSummary(data); // prepare data, enable Ringkasan button
+
+      const cards = document.getElementById('segCards');
+      cards.innerHTML = '';
+      const topK = parseInt(document.getElementById('topK').value) || 5;
+      // Display name for query song in segment headers
+      const qName = _queryTitle || _queryFileName.replace(/\.[^.]+$/, '') || 'Lagu Input';
+
+      data.segments.forEach(seg => {
+        const found = seg.matches && seg.matches.length > 0;
+        const bestPct = found ? seg.matches[0].embed_pct : 0;
+        const limitedMatches = found ? seg.matches.slice(0, topK) : [];
+        const div = document.createElement('div');
+        div.className = 'seg-card';
+        div.innerHTML = `
+      <div class="seg-header" onclick="toggleCard(this.parentElement)">
+        <div class="seg-badge ${found ? 'found' : 'not-found'}">${seg.seg_id}</div>
+        <div class="seg-info">
+          <h3>${seg.time_label}<span class="seg-query-label">lagu input</span></h3>
+          <p class="seg-match-hint">${found
+            ? `🎯 Cocok: <strong>${seg.matches[0].title}</strong> · ${seg.matches[0].artist}`
+            : 'Tidak ada kecocokan'}</p>
+        </div>
+        ${found
+            ? `<span class="seg-status found">${bestPct}%</span>`
+            : '<span class="seg-status skipped">—</span>'}
+        <span class="chevron">▾</span>
+      </div>
+      <div class="seg-body">
+        ${found
+            ? limitedMatches.map(m => renderMatch(m, seg)).join('')
+            : '<div style="padding:16px 18px;color:var(--muted);font-size:.85rem">Tidak ada lagu yang skornya ≥ threshold untuk segmen ini.</div>'}
+      </div>`;
+        cards.appendChild(div);
+      });
+
+      // Skipped segments
+      const skip = document.getElementById('skippedSection');
+      const skipList = document.getElementById('skippedList');
+      if (data.skipped_segments && data.skipped_segments.length > 0) {
+        if (skip) skip.style.display = 'block';
+        if (skipList) skipList.innerHTML = data.skipped_segments.map(s => {
+          const bestInfo = s.best_candidate
+            ? `<span style="color:var(--muted)"> (terbaik: ${s.best_candidate.title} ${s.best_candidate.score.toFixed(0)}%)</span>`
+            : '';
+          return `<div class="skipped-item"><span class="sk-num">${s.seg_id}</span><div class="sk-info"><strong>⏱ ${s.time_label}</strong><p>${s.reason}${bestInfo}</p></div></div>`;
+        }).join('');
+      } else {
+        if (skip) skip.style.display = 'none';
+      }
+    }
+
+    function toggleCard(card) { card.classList.toggle('open'); }
+
+    // ── Progress polling ─────────────────────────────────────────────────────────
+    const STAGE_MSG = {
+      'starting': '⏳ Mempersiapkan…',
+      'loading_model': '🔄 Memuat model dan database embedding…',
+      'downloading': '⬇️ Mengunduh audio dari YouTube…',
+      'normalizing': '🔧 Menormalisasi audio yang diunggah…',
+      'extracting': '🎵 Mengekstrak fitur CQT dari audio…',
+      'searching': '🔍 Mencari embedding yang paling mirip di database…',
+      'compiling': '📊 Menyusun dan mengurutkan hasil akhir…',
+      'done': '✅ Selesai! Menampilkan hasil…',
+    };
+
+    let _progressSession = null;
+    let _progressTimer = null;
+    let _timerInterval = null;
+    let _timerStart = null;
+
+    function startTimer() {
+      _timerStart = Date.now();
+      const el = document.getElementById('loadTimer');
+      _timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - _timerStart) / 1000);
+        const m = Math.floor(elapsed / 60);
+        const s = String(elapsed % 60).padStart(2, '0');
+        el.innerHTML = `${m}:${s}<span>detik</span>`;
+      }, 500);
+    }
+
+    function stopTimer() {
+      clearInterval(_timerInterval);
+      _timerInterval = null;
+    }
+
+    function startProgressPoll(sessionId) {
+      _progressSession = sessionId;
+      const stepEl = document.getElementById('loadStep');
+      _progressTimer = setInterval(async () => {
+        if (!_progressSession) return;
+        try {
+          const r = await fetch(`/api/progress/${encodeURIComponent(_progressSession)}`);
+          const d = await r.json();
+          const msg = STAGE_MSG[d.stage] || d.detail || '⏳ Memproses…';
+          if (stepEl.textContent !== msg) {
+            stepEl.style.opacity = '0';
+            setTimeout(() => { stepEl.textContent = msg; stepEl.style.opacity = '1'; }, 150);
+          }
+        } catch (_) { }
+      }, 800);
+    }
+
+    function stopProgressPoll() {
+      clearInterval(_progressTimer);
+      _progressTimer = null;
+      _progressSession = null;
+    }
+
+    // ── Submit query ──────────────────────────────────────────────────────────────
+    async function submitQuery() {
+      const isUrl = inputMode === 'url';
+      const url = document.getElementById('ytUrl').value.trim();
+      if (!isUrl && !selectedFile) return;
+      if (isUrl && !url) return;
+
+      isAnalyzing = true;
+      submitBtn.disabled = true;
+      document.getElementById('minScore').disabled = true;
+      document.getElementById('topK').disabled = true;
+      document.getElementById('deviceSelect').disabled = true;
+      ['tabFile', 'tabUrl'].forEach(id => {
+        const t = document.getElementById(id);
+        t.style.opacity = '0.4'; t.style.pointerEvents = 'none'; t.style.cursor = 'not-allowed';
+      });
+      document.getElementById('btnIcon').textContent = '⏳';
+      document.getElementById('btnText').textContent = 'Sedang menganalisis…';
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('errorBanner').style.display = 'none';
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('loadTimer').innerHTML = '0:00<span>detik</span>';
+      document.getElementById('loadStep').textContent = '⏳ Mempersiapkan…';
+
+      // ── Send the form first, get session_id, then start polling ─────────────
+      const sessionId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+      const fd = new FormData();
+      fd.append('session_id', sessionId);
+      if (isUrl) { fd.append('url', url); } else { fd.append('file', selectedFile); }
+      fd.append('min_score', (document.getElementById('minScore').value / 100).toString());
+      fd.append('top_k', document.getElementById('topK').value);
+      fd.append('candidates', '80');
+      fd.append('device', document.getElementById('deviceSelect').value);
+
+      // Start timer and progress polling immediately
+      startTimer();
+      startProgressPoll(sessionId);
+
+      try {
+        const res = await fetch('/api/query', { method: 'POST', body: fd, signal: AbortSignal.timeout(600000) });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          document.getElementById('errorMsg').textContent = data.error || 'Server error';
+          document.getElementById('errorTb').textContent = data.traceback || '';
+          document.getElementById('errorBanner').style.display = 'block';
+        } else {
+          setTimeout(() => stopProgressPoll(), 2000); // stop polling 2s after done
+          renderResults(data);
+        }
+      } catch (e) {
+        document.getElementById('errorMsg').textContent = e.message || 'Koneksi gagal';
+        document.getElementById('errorTb').textContent = '';
+        document.getElementById('errorBanner').style.display = 'block';
+      } finally {
+        isAnalyzing = false;
+        stopTimer();
+        stopProgressPoll();
+        document.getElementById('loading').style.display = 'none';
+        submitBtn.disabled = false;
+        document.getElementById('minScore').disabled = false;
+        document.getElementById('topK').disabled = false;
+        document.getElementById('deviceSelect').disabled = false;
+        ['tabFile', 'tabUrl'].forEach(id => {
+          const t = document.getElementById(id);
+          t.style.opacity = ''; t.style.pointerEvents = ''; t.style.cursor = '';
+        });
+        document.getElementById('btnIcon').textContent = '🔍';
+        document.getElementById('btnText').textContent =
+          inputMode === 'url'
+            ? (document.getElementById('ytUrl').value.trim() ? 'Analisis Sekarang' : 'Masukkan link dahulu')
+            : (selectedFile ? 'Analisis Sekarang' : 'Pilih file untuk mulai');
+      }
+    }
+
+    function resetForm() {
+      _sessionId = null;
+      _matchCounter = 0;
+      _summaryData = null;
+      const sBtn = document.getElementById('summaryBtn');
+      if (sBtn) sBtn.disabled = true;
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('errorBanner').style.display = 'none';
+      document.getElementById('segCards').innerHTML = '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  </script>
+</body>
+
+</html>

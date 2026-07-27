@@ -78,12 +78,132 @@ melody-similarity/
 │   ├── audio_utils.py        # Audio processing utilities
 │   ├── demucs_utils.py       # Demucs source separation wrapper
 │   ├── music_theory.py       # Music theory helpers
-│   └── midi_utils.py         # MIDI utilities
+│   ├── midi_utils.py         # MIDI utilities
+│   └── scraper.py            # Dataset scraper (YouTube via yt-dlp)
 ├── web/
 │   └── index.html            # Web UI frontend
+├── dataset.csv               # Scraped dataset index (song_id, title, artist, YouTube URL)
+├── spotify_songs.csv         # Source song list from Spotify dataset
 ├── requirements.txt
 └── README.md
 ```
+
+---
+
+## 📂 Dataset
+
+The dataset is built from a **two-step pipeline**: first collecting song metadata, then downloading the actual audio files.
+
+---
+
+### Step 1 — Song List Collection (`scraper.py`)
+
+**Source file:** [`spotify_songs.csv`](spotify_songs.csv)
+
+This file contains ~32,841 tracks from Spotify with rich metadata:
+
+| Column | Description |
+|--------|-------------|
+| `track_id` | Spotify track ID |
+| `track_name` | Song title |
+| `track_artist` | Artist name |
+| `track_popularity` | Spotify popularity score (0–100) |
+| `playlist_genre` | Genre (pop, rock, EDM, etc.) |
+| `danceability`, `energy`, `tempo`, ... | Spotify audio features |
+
+**Script:** [`script/scraper.py`](script/scraper.py)
+
+The scraper reads `spotify_songs.csv` and for each song:
+1. Searches YouTube for the **original version** and multiple **cover versions**
+2. Uses the YouTube Data API to find the best matching video
+3. Saves the results to [`dataset.csv`](dataset.csv)
+
+```bash
+# Run the scraper to collect YouTube URLs
+python script/scraper.py
+```
+
+> ⚠️ **Requires a YouTube Data API key:**
+> ```bash
+> # Windows
+> set YOUTUBE_API_KEY=your_api_key_here
+>
+> # Linux / macOS
+> export YOUTUBE_API_KEY=your_api_key_here
+> ```
+> Get a free API key at [Google Cloud Console](https://console.cloud.google.com/).
+
+**Output — [`dataset.csv`](dataset.csv)** — the scraped index with columns:
+
+| Column | Description | Example |
+|--------|-------------|---------|
+| `song_id` | Unique song identifier | `001` |
+| `track_id` | Version-specific ID | `001_1`, `001_2` |
+| `title` | Song title | `Mantan Terindah` |
+| `artist` | Artist name | `Kahitna` |
+| `version` | Version label | `original`, `cover`, `cover_2`, `cover_3` |
+| `url` | YouTube URL | `https://youtu.be/...` |
+
+Each `song_id` groups one song with its original and cover versions — this pairing is critical for training the similarity model (positives = same song, negatives = different songs).
+
+---
+
+### Step 2 — Audio Download (`download_dataset.py`)
+
+**Script:** [`script/download_dataset.py`](script/download_dataset.py)
+
+This script reads `dataset.csv` and downloads all audio files from YouTube using **yt-dlp**. It is designed to be robust and production-ready with many smart features.
+
+```bash
+# Download the entire dataset
+python script/download_dataset.py
+
+# Download a specific range of songs (useful for splitting across machines)
+python script/download_dataset.py --start-song 1 --end-song 1000
+
+# Control the number of parallel download threads
+python script/download_dataset.py --threads 8
+
+# Download a single song interactively (for testing)
+python script/download_dataset.py --single
+```
+
+**Key features of the downloader:**
+
+| Feature | Description |
+|---------|-------------|
+| 🔄 **Resume support** | Already-downloaded files are automatically skipped — safe to re-run |
+| ⚡ **Parallel downloads** | Up to 12 threads by default (`--threads` to override) |
+| 🚀 **aria2c acceleration** | Automatically uses aria2c (16 connections) if installed |
+| 🤖 **Bot detection handling** | Detects YouTube bot-checks and pauses automatically; stops after 3 detections |
+| ⏱️ **Rate limit backoff** | Handles HTTP 429 (too many requests) with exponential backoff |
+| 🗑️ **Auto-cleanup** | Permanently unavailable videos are removed from `dataset.csv` automatically |
+| 🔍 **Duplicate check** | Checks for duplicate `(title, original artist)` pairs before downloading |
+| ✅ **Verification** | Verifies the folder structure after download and reports incomplete songs |
+
+**Output structure:**
+```
+dataset/
+├── 001/
+│   ├── original.wav    ← original artist
+│   ├── cover.wav       ← cover version 1
+│   └── cover_2.wav     ← cover version 2 (if available)
+├── 002/
+│   ├── original.wav
+│   └── cover.wav
+└── ...
+```
+
+> 💡 **Tip:** If YouTube bot-detection stops the download, wait 30–60 minutes and re-run. Progress is saved automatically.
+
+---
+
+### Dataset Stats
+
+| File | Description | Size |
+|------|-------------|------|
+| `spotify_songs.csv` | Source Spotify track list | ~32,841 tracks |
+| `dataset.csv` | Scraped YouTube index (original + covers) | ~12,495 entries |
 
 ---
 

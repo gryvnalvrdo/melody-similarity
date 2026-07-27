@@ -27,11 +27,10 @@ dataset/
 features/
 downloads/
 
-# CSV data files (potentially large or copyrighted)
-dataset.csv
+# CSV data files (internal/temporary — exclude)
 exhausted_songs.csv
-spotify_songs.csv
 melody_notes.csv
+# dataset.csv and spotify_songs.csv are intentionally tracked (included in repo)
 
 # Evaluation/training logs
 auto_eval_log.json

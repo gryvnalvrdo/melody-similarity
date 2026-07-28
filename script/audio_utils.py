@@ -275,6 +275,54 @@ session_cache :dict =None )->bool :
         print (f"   ⚠️  audio_utils: download/extract failed for song {song_id}: {e}")
         import shutil ;shutil .rmtree (tmp_dir ,ignore_errors =True )
         return False 
+def get_pitch_contour(wav_path: str, hop_ms: float = 50.0) -> dict:
+    """
+    Ekstrak kontur pitch (waktu vs not MIDI) dari sebuah file WAV menggunakan
+    algoritma YIN, untuk divisualisasikan sebagai grafik kontur nada pada
+    fitur Audio Comparison Card (lihat api_play_compare di app.py).
+
+    Mengembalikan dict {"times": [...], "notes": [...]} — keduanya list
+    kosong jika file tidak ditemukan atau ekstraksi gagal.
+    """
+    import librosa
+    if not wav_path or not os.path.exists(wav_path):
+        return {"times": [], "notes": []}
+    try:
+        audio, sr = librosa.load(wav_path, sr=None, mono=True)
+    except Exception as e:
+        print(f"   ⚠️  audio_utils.get_pitch_contour: gagal load '{wav_path}': {e}")
+        return {"times": [], "notes": []}
+    if len(audio) < int(sr * 0.1):
+        return {"times": [], "notes": []}
+    hop_length = max(1, int(sr * hop_ms / 1000.0))
+    try:
+        f0 = librosa.yin(
+            audio,
+            fmin=librosa.note_to_hz('C2'),
+            fmax=librosa.note_to_hz('C7'),
+            sr=sr,
+            hop_length=hop_length,
+        )
+    except Exception as e:
+        print(f"   ⚠️  audio_utils.get_pitch_contour: YIN gagal pada '{wav_path}': {e}")
+        return {"times": [], "notes": []}
+    try:
+        rms = librosa.feature.rms(
+            y=audio, hop_length=hop_length, frame_length=hop_length * 2
+        )[0]
+    except Exception:
+        rms = np.ones_like(f0)
+    n = min(len(f0), len(rms))
+    f0, rms = f0[:n], rms[:n]
+    rms_threshold = max(1e-4, float(np.mean(rms)) * 0.15)  # ambang RMS adaptif
+    times, notes = [], []
+    for i in range(n):
+        if rms[i] < rms_threshold or f0[i] <= 0 or np.isnan(f0[i]):
+            continue
+        midi = librosa.hz_to_midi(float(f0[i]))
+        times.append(round(i * hop_length / sr, 3))
+        notes.append(round(float(midi), 2))
+    return {"times": times, "notes": notes}
 def cleanup_proof_session_cache (session_cache :dict )->None :
     import shutil 
     cleaned =set ()

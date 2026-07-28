@@ -487,30 +487,63 @@ def api_play_compare():
     try:
         from audio_utils import (extract_melody_segment,
                                   download_and_extract_proof_melody,
+                                  get_pitch_contour,
                                   _normalize_song_id, _load_csv_urls, _CSV_URL_CACHE)
     except ImportError:
         from script.audio_utils import (extract_melody_segment,
                                          download_and_extract_proof_melody,
+                                         get_pitch_contour,
                                          _normalize_song_id, _load_csv_urls, _CSV_URL_CACHE)
 
     tmp_out_dir = tempfile.mkdtemp(prefix="play_compare_")
     try:
-                                                                                 
-        q_wav = os.path.join(tmp_out_dir, "query_clip.wav")
+        import librosa, soundfile as sf
+        try:
+            from demucs_utils import remove_drums
+        except ImportError:
+            from script.demucs_utils import remove_drums
+
+        def _demucs_clean(raw_path: str, out_name: str, label: str) -> str:
+            """Jalankan Demucs drum-removal pada satu klip WAV.
+            Mengembalikan path hasil (sudah dinormalisasi -3 dBFS),
+            atau path mentah (raw_path) sebagai fallback jika Demucs gagal."""
+            try:
+                print(f"   🥁  Demucs: removing drums from {label} clip…")
+                audio_raw, sr_raw = librosa.load(raw_path, sr=None, mono=True)
+                audio_nd = remove_drums(audio_raw, sr_raw)
+                if audio_nd is None:
+                    print(f"   ⚠️  Demucs returned None — using raw {label} clip")
+                    return raw_path
+                peak = np.max(np.abs(audio_nd))
+                if peak > 1e-6:
+                    audio_nd = audio_nd * (10 ** (-3.0 / 20.0) / peak)
+                nd_path = os.path.join(tmp_out_dir, f"{out_name}_nd.wav")
+                sf.write(nd_path, audio_nd, sr_raw, subtype="PCM_16")
+                print(f"   ✅  {label.capitalize()} clip: drums removed")
+                return nd_path
+            except Exception as e:
+                print(f"   ⚠️  Demucs drum removal failed for {label}: {e} — using raw")
+                return raw_path
+
+        # ── Query clip ────────────────────────────────────────────────────────
+        q_wav_raw  = os.path.join(tmp_out_dir, "query_clip_raw.wav")
         query_path = sess.get('query_path', '')
         query_ok   = False
         if query_path and os.path.exists(query_path):
-            query_ok = extract_melody_segment(query_path, q_start, q_end, q_wav)
+            query_ok = extract_melody_segment(query_path, q_start, q_end, q_wav_raw)
+        q_wav = _demucs_clean(q_wav_raw, "query_clip", "query") if query_ok else q_wav_raw
 
-        m_wav   = os.path.join(tmp_out_dir, "match_clip.wav")
-        match_ok = download_and_extract_proof_melody(
-            song_id   = song_id,
-            version   = version,
-            start_time= m_start,
-            end_time  = m_end,
-            output_path= m_wav,
+        # ── Match clip (raw download) ─────────────────────────────────────────
+        m_wav_raw = os.path.join(tmp_out_dir, "match_clip_raw.wav")
+        match_ok  = download_and_extract_proof_melody(
+            song_id    = song_id,
+            version    = version,
+            start_time = m_start,
+            end_time   = m_end,
+            output_path= m_wav_raw,
             session_cache= sess['dl_cache'],
         )
+        m_wav = _demucs_clean(m_wav_raw, "match_clip", "match") if match_ok else m_wav_raw
 
         def wav_to_b64(path):
             if not path or not os.path.exists(path):
@@ -518,9 +551,14 @@ def api_play_compare():
             with open(path, 'rb') as f:
                 return base64.b64encode(f.read()).decode('utf-8')
 
+        query_contour = get_pitch_contour(q_wav)  if query_ok else {"times": [], "notes": []}
+        match_contour = get_pitch_contour(m_wav)  if match_ok else {"times": [], "notes": []}
+
         return jsonify({
             "query_audio_b64": wav_to_b64(q_wav) if query_ok else None,
             "match_audio_b64": wav_to_b64(m_wav) if match_ok else None,
+            "query_contour": query_contour,
+            "match_contour": match_contour,
             "query_ok":  query_ok,
             "match_ok":  match_ok,
             "q_start": q_start, "q_end": q_end,
@@ -533,6 +571,7 @@ def api_play_compare():
         return jsonify({"error": str(e), "traceback": tb}), 500
     finally:
         shutil.rmtree(tmp_out_dir, ignore_errors=True)
+
 
 def _run_query(input_src: str, top_k: int, n_candidates: int,
                min_score: float, session_id: str = None,

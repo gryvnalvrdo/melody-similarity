@@ -1301,6 +1301,85 @@
       color-scheme: dark;
     }
 
+    /* Pitch contour chart (Gambar 25 style) */
+    .contour-wrap {
+      margin-bottom: 10px;
+      background: rgba(255, 255, 255, .04);
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 8px;
+      padding: 8px 10px 4px;
+      position: relative;
+    }
+
+    .compare-track.track-query .contour-wrap {
+      border-color: rgba(88, 166, 255, .2)
+    }
+
+    .compare-track.track-match .contour-wrap {
+      border-color: rgba(188, 140, 255, .2)
+    }
+
+    .contour-label {
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .contour-canvas {
+      display: block;
+      width: 100%;
+      height: 84px;
+    }
+
+    /* Vertical playhead line, moves with audio.currentTime */
+    .contour-playhead {
+      position: absolute;
+      top: 26px;
+      left: 0;
+      width: 2px;
+      height: 84px;
+      background: var(--red);
+      box-shadow: 0 0 4px rgba(248, 81, 73, .7);
+      pointer-events: none;
+      display: none;
+      will-change: transform;
+      transform: translateX(0);
+    }
+
+    .compare-normalize-note {
+      font-size: .72rem;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .04);
+      border: 1px dashed rgba(255, 255, 255, .12);
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin: 0 0 10px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .norm-shift-badge {
+      font-size: .68rem;
+      font-weight: 600;
+      color: #ffd479;
+      background: rgba(255, 212, 121, .1);
+      border: 1px solid rgba(255, 212, 121, .25);
+      border-radius: 999px;
+      padding: 1px 8px;
+    }
+
+    .contour-empty {
+      font-size: .74rem;
+      color: var(--muted);
+      text-align: center;
+      padding: 26px 0;
+    }
+
     .compare-error {
       padding: 14px 18px;
       font-size: .83rem;
@@ -1458,6 +1537,7 @@
     let _queryFileName = '(audio yang diupload)';
     let _queryTitle = '';   // YouTube video title (empty for file uploads)
     let _queryArtist = '';   // YouTube uploader
+    let _queryKey = '';     // Kunci nada query hasil deteksi (mis. "C Major"), dipakai untuk transpose kontur
 
     // Range inputs
     ['minScore', 'topK'].forEach(id => {
@@ -1543,6 +1623,234 @@
       document.getElementById('btnText').textContent = e.target.value.trim() ? 'Analisis Sekarang' : 'Masukkan link dahulu';
     };
 
+    // ── Pitch Contour Chart (Gambar 25) ─────────────────────────────────────────
+    const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    function midiToNoteName(m) {
+      const r = Math.round(m);
+      return NOTE_NAMES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1);
+    }
+
+    // Peta nama nada dasar → semitone (0=C), dipakai untuk menghitung transpose
+    const KEY_SEMI = {
+      "C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4,
+      "F": 5, "F#": 6, "Gb": 6, "G": 7, "G#": 8, "Ab": 8, "A": 9,
+      "A#": 10, "Bb": 10, "B": 11
+    };
+
+    /**
+     * Menghitung pergeseran semitone yang perlu ditambahkan ke kontur MATCH
+     * supaya kunci nadanya sejajar (secara pitch-class) dengan kunci nada QUERY.
+     * Hasilnya dibatasi ke rentang -6..+6 semitone (1 oktaf) — hanya menyamakan
+     * kelas nada, BUKAN oktaf; kalau register query & match beda >1 oktaf,
+     * transpose ini tidak otomatis menyusulnya (lihat catatan di UI).
+     * Mengembalikan 0 jika salah satu kunci tidak diketahui/"Unknown".
+     */
+    function computeTransposeShift(queryKeyStr, matchKeyStr) {
+      if (!queryKeyStr || !matchKeyStr) return 0;
+      if (queryKeyStr === 'Unknown' || matchKeyStr === 'Unknown') return 0;
+      const qRoot = queryKeyStr.split(' ')[0];
+      const mRoot = matchKeyStr.split(' ')[0];
+      const qSemi = KEY_SEMI.hasOwnProperty(qRoot) ? KEY_SEMI[qRoot] : -1;
+      const mSemi = KEY_SEMI.hasOwnProperty(mRoot) ? KEY_SEMI[mRoot] : -1;
+      if (qSemi < 0 || mSemi < 0) return 0;
+      let diff = ((qSemi - mSemi) % 12 + 12) % 12;   // 0..11
+      if (diff > 6) diff -= 12;                       // -5..6, jalur terdekat
+      return diff;
+    }
+
+    /**
+     * Menghitung rentang nada (MIDI) gabungan dari dua kontur (misal query &
+     * match-setelah-transpose) supaya keduanya dipetakan ke sumbu-Y yang SAMA.
+     * Tanpa ini, tiap grafik auto-scale sendiri² dan melodi yang identik pun
+     * bisa terlihat "beda tinggi" di layar walau bentuknya sama.
+     */
+    function computeSharedRange(notesA, notesB) {
+      const all = [...(notesA || []), ...(notesB || [])].filter(n => Number.isFinite(n));
+      if (!all.length) return null;
+      let nMin = Math.min(...all), nMax = Math.max(...all);
+      if (nMax - nMin < 4) { const mid = (nMax + nMin) / 2; nMin = mid - 2; nMax = mid + 2; }
+      const nPad = (nMax - nMin) * 0.15;
+      nMin -= nPad; nMax += nPad;
+      return { nMin, nMax };
+    }
+
+    /**
+     * Menggambar grafik kontur nada dominan (MIDI note vs waktu) pada <canvas>.
+     * contour: { times: number[], notes: number[] } — hasil algoritma YIN
+     * dari backend (audio_utils.get_pitch_contour). Jeda pada array notes
+     * (karena bagian senyap disaring via ambang RMS) TIDAK dihubungkan
+     * dengan garis, agar kontur yang tampil benar-benar mengikuti melodi
+     * yang terdeteksi, bukan interpolasi lurus melintasi jeda diam.
+     *
+     * Sumbu X selalu 0 → totalDuration (durasi penuh klip audio), BUKAN
+     * hanya rentang not pertama-terakhir yang terdeteksi. Ini penting agar
+     * grafik selaras 1:1 dengan waktu putar audio (dipakai oleh playhead).
+     *
+     * opts.shift : semitone yang ditambahkan ke tiap not sebelum digambar
+     *              (dipakai supaya kunci match "disamakan" secara visual ke
+     *              query — audio aslinya TIDAK diubah, cuma posisi garis).
+     * opts.range : { nMin, nMax } — kalau diisi, dipakai sebagai skala-Y
+     *              BERSAMA (shared) alih-alih auto-scale sendiri per grafik.
+     */
+    function drawPitchContour(canvasId, contour, color, totalDuration, opts) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const { shift = 0, range = null } = opts || {};
+      const wrap = canvas.closest('.contour-wrap');
+      const times = (contour && contour.times) || [];
+      const notesRaw = (contour && contour.notes) || [];
+      const notes = shift ? notesRaw.map(n => n + shift) : notesRaw;
+      const duration = totalDuration && totalDuration > 0 ? totalDuration : (times[times.length - 1] || 1);
+
+      if (!times.length || !notes.length) {
+        canvas.style.display = 'none';
+        const empty = document.createElement('div');
+        empty.className = 'contour-empty';
+        empty.textContent = '〜 Kontur nada tidak terdeteksi pada klip ini';
+        wrap.appendChild(empty);
+        return;
+      }
+
+      // Skala canvas untuk layar high-DPI agar garis tetap tajam
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 300;
+      const cssH = 84;
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
+      canvas.style.height = cssH + 'px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      const padL = 2, padR = 2, padT = 6, padB = 14;
+      const plotW = cssW - padL - padR;
+      const plotH = cssH - padT - padB;
+
+      let nMin, nMax;
+      if (range) {
+        // Skala-Y bersama (shared) — query & match dipetakan ke rentang yang sama
+        nMin = range.nMin; nMax = range.nMax;
+      } else {
+        nMin = Math.min(...notes); nMax = Math.max(...notes);
+        if (nMax - nMin < 4) { const mid = (nMax + nMin) / 2; nMin = mid - 2; nMax = mid + 2; }
+        const nPad = (nMax - nMin) * 0.15;
+        nMin -= nPad; nMax += nPad;
+      }
+
+      const xOf = t => padL + (t / duration) * plotW;
+      const yOf = n => padT + plotH - ((n - nMin) / (nMax - nMin)) * plotH;
+
+      // Cache info skala di elemen canvas — dipakai oleh attachContourPlayhead()
+      canvas._contourScale = { padL, plotW, duration, cssH };
+
+      // Sumbu Y: 5 label nada, ditumpuk di tepi kiri (overlay, seperti Gambar 25)
+      const yTickCount = 5;
+      ctx.font = '8.5px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i < yTickCount; i++) {
+        const frac = i / (yTickCount - 1);
+        const noteVal = nMax - frac * (nMax - nMin);
+        const y = padT + frac * plotH;
+        ctx.strokeStyle = 'rgba(255,255,255,.06)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,.4)';
+        ctx.fillText(midiToNoteName(noteVal), padL + 2, y - 4);
+      }
+
+      // Deteksi jeda (silence) antar frame agar tidak digambar sebagai garis lurus
+      const hopEstimates = [];
+      for (let i = 1; i < times.length; i++) hopEstimates.push(times[i] - times[i - 1]);
+      hopEstimates.sort((a, b) => a - b);
+      const typicalHop = hopEstimates[Math.floor(hopEstimates.length / 2)] || 0.05;
+      const gapThreshold = typicalHop * 2.5;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      let penDown = false;
+      for (let i = 0; i < times.length; i++) {
+        const gap = i > 0 && (times[i] - times[i - 1]) > gapThreshold;
+        const x = xOf(times[i]), y = yOf(notes[i]);
+        if (!penDown || gap) { ctx.moveTo(x, y); penDown = true; }
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Sumbu waktu (label awal & akhir) — selalu 0s → durasi penuh klip
+      ctx.fillStyle = 'rgba(255,255,255,.35)';
+      ctx.font = '9px system-ui, sans-serif';
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      ctx.fillText('0.0s', padL, cssH - padB + 2);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${duration.toFixed(1)}s`, padL + plotW, cssH - padB + 2);
+    }
+
+    /**
+     * Menghubungkan elemen <audio> ke garis playhead merah pada grafik kontur,
+     * sehingga garis bergerak dari kiri ke kanan mengikuti posisi putar audio.
+     *
+     * Event 'timeupdate' bawaan <audio> hanya nembak ~4x/detik di kebanyakan
+     * browser — itu sebabnya garis kelihatan "patah-patah". Di sini dipakai
+     * requestAnimationFrame selama audio sedang play, jadi posisinya di-update
+     * setiap frame (≈60fps) → gerakannya mulus. 'timeupdate' tetap dipasang
+     * sebagai fallback untuk kondisi di luar rAF (mis. browser membatasi rAF
+     * di tab background).
+     */
+    function attachContourPlayhead(audioId, playheadId, fallbackDuration) {
+      const audioEl = document.getElementById(audioId);
+      const playhead = document.getElementById(playheadId);
+      if (!audioEl || !playhead) return;
+
+      const canvas = playhead.parentElement.querySelector('.contour-canvas');
+      let rafId = null;
+
+      function positionAt(t) {
+        const scale = canvas && canvas._contourScale;
+        const duration = (scale && scale.duration) || fallbackDuration || audioEl.duration || 1;
+        const padL = (scale && scale.padL) || 0;
+        const plotW = (scale && scale.plotW) || (canvas ? canvas.clientWidth : 0);
+        const frac = Math.min(1, Math.max(0, t / duration));
+        // transform (compositor-only) alih-alih 'left' (memicu reflow tiap frame)
+        // → gerakan garis jauh lebih mulus, terutama saat rAF jalan tiap frame.
+        playhead.style.transform = `translateX(${(padL + frac * plotW).toFixed(2)}px)`;
+        if (canvas) {
+          const top = canvas.offsetTop, h = canvas.clientHeight;
+          if (playhead._lastTop !== top)  { playhead.style.top = top + 'px'; playhead._lastTop = top; }
+          if (playhead._lastH !== h)      { playhead.style.height = h + 'px'; playhead._lastH = h; }
+        }
+        playhead.style.display = 'block';
+      }
+
+      function tick() {
+        positionAt(audioEl.currentTime);
+        if (!audioEl.paused && !audioEl.ended) {
+          rafId = requestAnimationFrame(tick);
+        } else {
+          rafId = null;
+        }
+      }
+
+      function startLoop() { if (rafId == null) rafId = requestAnimationFrame(tick); }
+      function stopLoop()  { if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; } }
+
+      audioEl.addEventListener('play',    startLoop);
+      audioEl.addEventListener('playing', startLoop);
+      audioEl.addEventListener('pause',   () => { stopLoop(); positionAt(audioEl.currentTime); });
+      audioEl.addEventListener('seeking', () => positionAt(audioEl.currentTime));
+      audioEl.addEventListener('seeked',  () => positionAt(audioEl.currentTime));
+      // Fallback: kalau rAF loop lagi tidak jalan (mis. tab background), tetap update
+      audioEl.addEventListener('timeupdate', () => { if (rafId == null) positionAt(audioEl.currentTime); });
+      audioEl.addEventListener('ended', () => { stopLoop(); playhead.style.display = 'none'; });
+
+      // Posisi awal (sebelum audio diputar)
+      positionAt(audioEl.currentTime || 0);
+    }
+
     // ── Play Compare Logic ───────────────────────────────────────────────────────
     /**
      * Called when user clicks ▶ Putar Perbandingan on a match item.
@@ -1554,7 +1862,7 @@
      * queryTitle : display name for query
      * matchTitle : display name for match
      */
-    async function playCompare(btn, panelId, sessionId, qStart, qEnd, songId, version, mStart, mEnd, queryTitle, matchTitle) {
+    async function playCompare(btn, panelId, sessionId, qStart, qEnd, songId, version, mStart, mEnd, queryTitle, matchTitle, queryKey, matchKey) {
       const panel = document.getElementById(panelId);
       if (!panel) return;
 
@@ -1591,18 +1899,32 @@
         const mRange = `${fmtTime(data.m_start)} – ${fmtTime(data.m_end)}`;
 
         const queryPlayer = data.query_audio_b64
-          ? `<div class="audio-wrapper"><audio controls preload="metadata" src="data:audio/wav;base64,${data.query_audio_b64}"></audio></div>`
+          ? `<div class="audio-wrapper"><audio id="${panelId}-q-audio" controls preload="metadata" src="data:audio/wav;base64,${data.query_audio_b64}"></audio></div>`
           : `<div class="audio-wrapper" style="color:var(--muted);font-size:.82rem;padding:12px">⚠️ Audio query tidak tersedia untuk sesi ini</div>`;
 
         const matchPlayer = data.match_audio_b64
-          ? `<div class="audio-wrapper"><audio controls preload="metadata" src="data:audio/wav;base64,${data.match_audio_b64}"></audio></div>`
+          ? `<div class="audio-wrapper"><audio id="${panelId}-m-audio" controls preload="metadata" src="data:audio/wav;base64,${data.match_audio_b64}"></audio></div>`
           : `<div class="audio-wrapper" style="color:var(--muted);font-size:.82rem;padding:12px">⚠️ Gagal mengunduh dari YouTube — coba lagi</div>`;
+
+        // Hitung transpose semitone (match → disejajarkan ke kunci query) &
+        // rentang sumbu-Y bersama, supaya kemiripan kontur benar² kelihatan
+        // di layar terlepas dari kunci dasarnya berbeda.
+        const shift = computeTransposeShift(queryKey, matchKey);
+        const qNotesRaw = (data.query_contour && data.query_contour.notes) || [];
+        const mNotesShifted = ((data.match_contour && data.match_contour.notes) || []).map(n => n + shift);
+        const sharedRange = computeSharedRange(qNotesRaw, mNotesShifted);
+        const normNoteHtml = (qNotesRaw.length && mNotesShifted.length)
+          ? `<div class="compare-normalize-note">🔧 Dinormalisasi untuk perbandingan visual — audio tetap nada asli`
+            + (shift ? ` <span class="norm-shift-badge">match ditranspose ${shift > 0 ? '+' : ''}${shift} semitone</span>` : '')
+            + `</div>`
+          : '';
 
         panel.innerHTML = `
       <div class="compare-panel-header">
         <span class="cph-icon">🎧</span>
         <span>Perbandingan Audio</span>
       </div>
+      ${normNoteHtml}
       <div class="compare-tracks">
         <div class="compare-track track-query">
           <div class="track-header">
@@ -1610,6 +1932,11 @@
           </div>
           <div class="compare-track-title" title="${queryTitle}">${queryTitle}</div>
           <div class="compare-track-time">⏱ ${qRange}</div>
+          <div class="contour-wrap" id="${panelId}-q-wrap">
+            <div class="contour-label">📈 Kontur Nada — Query</div>
+            <canvas id="${panelId}-q-canvas" class="contour-canvas"></canvas>
+            <div class="contour-playhead" id="${panelId}-q-playhead"></div>
+          </div>
           ${queryPlayer}
         </div>
         <div class="compare-track track-match">
@@ -1618,12 +1945,32 @@
           </div>
           <div class="compare-track-title" title="${matchTitle}">${matchTitle}</div>
           <div class="compare-track-time">⏱ ${mRange}</div>
+          <div class="contour-wrap" id="${panelId}-m-wrap">
+            <div class="contour-label">📈 Kontur Nada — Match${shift ? ` (transpose ${shift > 0 ? '+' : ''}${shift}st)` : ''}</div>
+            <canvas id="${panelId}-m-canvas" class="contour-canvas"></canvas>
+            <div class="contour-playhead" id="${panelId}-m-playhead"></div>
+          </div>
           ${matchPlayer}
         </div>
       </div>`;
 
         panel.dataset.loaded = '1';
         panel.classList.add('visible');
+
+        // Gambar grafik kontur nada (pitch contour) — sesuai Gambar 25.
+        // Match ditranspose `shift` semitone & keduanya berbagi skala-Y
+        // (sharedRange) supaya melodi yang mirip terlihat "menempel" di
+        // ketinggian yang sama, terlepas dari kunci dasarnya berbeda.
+        const qDur = Math.max(data.q_end - data.q_start, 0.5);
+        const mDur = Math.max(data.m_end - data.m_start, 0.5);
+        drawPitchContour(`${panelId}-q-canvas`, data.query_contour, '#58a6ff', qDur,
+          { shift: 0, range: sharedRange });
+        drawPitchContour(`${panelId}-m-canvas`, data.match_contour, '#bc8cff', mDur,
+          { shift: shift, range: sharedRange });
+
+        // Playhead merah — bergerak sesuai posisi putar masing-masing audio
+        attachContourPlayhead(`${panelId}-q-audio`, `${panelId}-q-playhead`, qDur);
+        attachContourPlayhead(`${panelId}-m-audio`, `${panelId}-m-playhead`, mDur);
 
       } catch (e) {
         panel.innerHTML = `<div class="compare-error">❌ Koneksi gagal: ${e.message}</div>`;
@@ -1650,7 +1997,9 @@
       const qDisplayName = _queryTitle || _queryFileName.replace(/\.[^.]+$/, '') || 'Lagu Input';
       const matchTitle = `${m.title} (${m.artist})`;
 
-      const onclickStr = `playCompare(document.getElementById('${btnId}'),'${panelId}',_sessionId,${seg.start},${seg.end},'${m.song_id}','${m.version}',${m.m_start},${m.m_end},\`${qDisplayName.replace(/`/g, "'")}\`,\`${matchTitle.replace(/`/g, "'")}\`)`;
+      const qKeyStr = (_queryKey || '').replace(/`/g, "'");
+      const mKeyStr = (m.m_key || '').replace(/`/g, "'");
+      const onclickStr = `playCompare(document.getElementById('${btnId}'),'${panelId}',_sessionId,${seg.start},${seg.end},'${m.song_id}','${m.version}',${m.m_start},${m.m_end},\`${qDisplayName.replace(/`/g, "'")}\`,\`${matchTitle.replace(/`/g, "'")}\`,\`${qKeyStr}\`,\`${mKeyStr}\`)`;
 
       return `
   <div class="match-item">
@@ -1861,6 +2210,7 @@
       _sessionId = data.session_id || null;
       _queryTitle = data.query_title || '';
       _queryArtist = data.query_artist || '';
+      _queryKey = data.query_key || '';
       _matchCounter = 0;
 
       document.getElementById('results').style.display = 'block';

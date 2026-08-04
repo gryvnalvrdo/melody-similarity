@@ -2401,7 +2401,7 @@
       startProgressPoll(sessionId);
 
       try {
-        const res = await fetch('/api/query', { method: 'POST', body: fd, signal: AbortSignal.timeout(600000) });
+        const res = await fetch('/api/query', { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok || data.error) {
           document.getElementById('errorMsg').textContent = data.error || 'Server error';

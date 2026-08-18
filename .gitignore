@@ -104,3 +104,16 @@ Thumbs.db
 .LSOverride
 Desktop.ini
 $RECYCLE.BIN/
+
+# ─── Hosting / Deployment ────────────────────────────────────────────────────
+.env
+!.env.example
+benchmark_audio/
+
+# ─── Next.js Frontend ────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/.env.local
+frontend/.env.production

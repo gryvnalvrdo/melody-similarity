@@ -19,13 +19,16 @@ from flask_cors import CORS
 import logging
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
+
+
 _model_cache: dict = {}
 _index  = None
 _meta   = None
 _lock   = threading.Lock()
 
 _SESSION_STORE: dict = {}
-_SESSION_TTL  = 3600          
+_SESSION_TTL   = 3600
+_SESSION_MAX   = 200
 
 _PROGRESS: dict = {}
 
@@ -37,25 +40,27 @@ def _set_progress(session_id: str, stage: str, detail: str = ""):
         _PROGRESS[session_id] = {'stage': stage, 'detail': detail}
 
 def _prune_sessions():
+    import shutil
     now = time.time()
     expired = [k for k, v in _SESSION_STORE.items()
                if now - v.get('created', now) > _SESSION_TTL]
     for k in expired:
         sess = _SESSION_STORE.pop(k, {})
-                                          
-        import shutil
         for path in sess.get('dl_cache', {}).values():
             try:
                 shutil.rmtree(os.path.dirname(path), ignore_errors=True)
             except Exception:
                 pass
-                                   
         qp = sess.get('query_path', '')
         if qp and os.path.exists(qp):
             try:
                 os.remove(qp)
             except Exception:
                 pass
+    if len(_SESSION_STORE) > _SESSION_MAX:
+        oldest = sorted(_SESSION_STORE.items(), key=lambda x: x[1].get('created', 0))
+        for k, sess in oldest[:len(_SESSION_STORE) - _SESSION_MAX]:
+            _SESSION_STORE.pop(k, {})
 
 def _resolve_device(device_pref: str = "auto") -> str:
     import torch
@@ -100,11 +105,22 @@ def _ensure_loaded(device_key: str = None, model_path=None):
 app = Flask(__name__,
             static_folder=os.path.join(_ROOT_DIR, "web"),
             static_url_path="")
+
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+
 CORS(app)
+
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify({"error": "File terlalu besar. Maksimum upload adalah 50 MB."}), 413
 
 @app.route("/")
 def index():
     return send_from_directory(os.path.join(_ROOT_DIR, "web"), "index.html")
+
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    return jsonify({"ready": True, "stage": "ready", "detail": "Running locally"})
 
 @app.route("/api/check_gpu", methods=["GET"])
 def api_check_gpu():
@@ -135,6 +151,13 @@ def api_device_info():
 
 @app.route("/api/benchmark", methods=["POST"])
 def api_benchmark():
+    return jsonify({
+        "error": "Fitur benchmark tidak tersedia.",
+        "detail": "Benchmark membutuhkan dataset.h5 yang tidak disertakan.",
+    }), 503
+
+
+def _api_benchmark_legacy():
     global _BENCH_STATUS
     with _BENCH_LOCK:
         if _BENCH_STATUS["running"]:
@@ -463,10 +486,18 @@ def api_query():
             print("[API ERROR]\n" + tb, flush=True)
         except Exception:
             pass
-        return jsonify({"error": str(e), "traceback": tb}), 500
+        # JANGAN kirim traceback ke client — hanya log di server
+        return jsonify({"error": str(e)}), 500
     finally:
-                                                                         
-        pass
+        # Cleanup temp file upload jika ada dan belum dipindah ke session store
+        if tmp_path and os.path.exists(tmp_path):
+            # Cek dulu apakah session masih memerlukannya
+            sess = _SESSION_STORE.get(session_id, {})
+            if sess.get('query_path', '') != tmp_path:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
 
 @app.route("/api/play_compare", methods=["GET"])
 def api_play_compare():
@@ -568,8 +599,10 @@ def api_play_compare():
     except Exception as e:
         tb = traceback.format_exc()
         print("[PLAY_COMPARE ERROR]\n" + tb, flush=True)
-        return jsonify({"error": str(e), "traceback": tb}), 500
+        # Jangan expose traceback ke client
+        return jsonify({"error": str(e)}), 500
     finally:
+        # Selalu cleanup temp dir — tidak peduli error atau tidak
         shutil.rmtree(tmp_out_dir, ignore_errors=True)
 
 

@@ -31,6 +31,35 @@ _SESSION_TTL   = 3600
 _SESSION_MAX   = 200
 
 _PROGRESS: dict = {}
+_PROGRESS_MAX = 300
+
+_RATE_LOCK = threading.Lock()
+_RATE_STORE: dict = {}
+
+
+def _get_client_ip() -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def _check_rate_limit(bucket: str, max_req: int, window_sec: int) -> bool:
+    now = time.time()
+    key = f"{bucket}:{_get_client_ip()}"
+    with _RATE_LOCK:
+        if len(_RATE_STORE) > 2000:
+            stale = [k for k, v in _RATE_STORE.items() if v["reset"] <= now]
+            for k in stale:
+                _RATE_STORE.pop(k, None)
+        entry = _RATE_STORE.get(key)
+        if not entry or entry["reset"] <= now:
+            _RATE_STORE[key] = {"count": 1, "reset": now + window_sec}
+            return True
+        if entry["count"] >= max_req:
+            return False
+        entry["count"] += 1
+        return True
 
 _BENCH_LOCK   = threading.Lock()
 _BENCH_STATUS = {"running": False, "results": None, "error": None, "log": []}
@@ -60,7 +89,11 @@ def _prune_sessions():
     if len(_SESSION_STORE) > _SESSION_MAX:
         oldest = sorted(_SESSION_STORE.items(), key=lambda x: x[1].get('created', 0))
         for k, sess in oldest[:len(_SESSION_STORE) - _SESSION_MAX]:
-            _SESSION_STORE.pop(k, {})
+            _SESSION_STORE.pop(k, None)
+    if len(_PROGRESS) > _PROGRESS_MAX:
+        overflow = len(_PROGRESS) - _PROGRESS_MAX
+        for k in list(_PROGRESS.keys())[:overflow]:
+            _PROGRESS.pop(k, None)
 
 def _resolve_device(device_pref: str = "auto") -> str:
     import torch
@@ -110,9 +143,29 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 CORS(app)
 
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    return response
+
+
 @app.errorhandler(413)
 def too_large(e):
     return jsonify({"error": "File terlalu besar. Maksimum upload adalah 50 MB."}), 413
+
+
+@app.errorhandler(404)
+def not_found_err(e):
+    return jsonify({"error": "Endpoint atau sumber daya tidak ditemukan."}), 404
+
+
+@app.errorhandler(500)
+def server_err(e):
+    return jsonify({"error": "Terjadi gangguan internal server. Silakan coba lagi."}), 500
 
 @app.route("/")
 def index():
@@ -387,6 +440,12 @@ def api_benchmark_status():
 
 @app.route("/api/query", methods=["POST"])
 def api_query():
+    if not _check_rate_limit("query", max_req=8, window_sec=60):
+        return jsonify({
+            "error": "Terlalu banyak permintaan analisis. Silakan tunggu sebentar dan coba lagi."
+        }), 429
+    tmp_path = None
+    session_id = ""
     try:
         top_k      = int(request.form.get("top_k",      5)  or (request.json or {}).get("top_k",      5))
         candidates = int(request.form.get("candidates", 80) or (request.json or {}).get("candidates", 80))
@@ -480,14 +539,15 @@ def api_query():
         result['session_id'] = session_id
         return jsonify(result)
 
-    except Exception as e:
+    except Exception:
         tb = traceback.format_exc()
         try:
             print("[API ERROR]\n" + tb, flush=True)
         except Exception:
             pass
-        # JANGAN kirim traceback ke client — hanya log di server
-        return jsonify({"error": str(e)}), 500
+        return jsonify({
+            "error": "Gagal menganalisis audio. Pastikan format audio atau link YouTube valid lalu coba lagi."
+        }), 500
     finally:
         # Cleanup temp file upload jika ada dan belum dipindah ke session store
         if tmp_path and os.path.exists(tmp_path):
@@ -502,6 +562,9 @@ def api_query():
 @app.route("/api/play_compare", methods=["GET"])
 def api_play_compare():
     import base64, shutil
+
+    if not _check_rate_limit("play_compare", max_req=20, window_sec=60):
+        return jsonify({"error": "Terlalu banyak permintaan pemutaran. Tunggu beberapa detik."}), 429
 
     session_id = request.args.get("session_id", "")
     q_start    = float(request.args.get("q_start", 0))
@@ -596,11 +659,10 @@ def api_play_compare():
             "m_start": m_start, "m_end": m_end,
         })
 
-    except Exception as e:
+    except Exception:
         tb = traceback.format_exc()
         print("[PLAY_COMPARE ERROR]\n" + tb, flush=True)
-        # Jangan expose traceback ke client
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Gagal memuat potongan audio pembanding."}), 500
     finally:
         # Selalu cleanup temp dir — tidak peduli error atau tidak
         shutil.rmtree(tmp_out_dir, ignore_errors=True)

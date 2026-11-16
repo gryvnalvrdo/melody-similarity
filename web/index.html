@@ -4,21 +4,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Melody Similarity — Analisis Kemiripan Melodi</title>
+  <title>Melody Similarity | Analisis Kemiripan Melodi</title>
   <style>
     :root {
       --bg: #0d1117;
       --surface: #161b22;
       --card: #1e2530;
       --border: #30363d;
-      --accent: #58a6ff;
-      --green: #3fb950;
-      --yellow: #d29922;
+      --accent: #3b82f6;
+      --green: #10b981;
+      --yellow: #f59e0b;
       --red: #f85149;
       --text: #e6edf3;
       --muted: #8b949e;
       --radius: 12px;
-      --purple: #bc8cff
+      --purple: #8b5cf6
+    }
+
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --card: #ffffff;
+      --border: #cbd5e1;
+      --accent: #2563eb;
+      --green: #059669;
+      --yellow: #d97706;
+      --red: #dc2626;
+      --text: #0f172a;
+      --muted: #475569;
     }
 
     * {
@@ -32,22 +45,40 @@
       color: var(--text);
       font-family: 'Segoe UI', system-ui, sans-serif;
       min-height: 100vh;
-      padding: 24px 16px
+      padding: 24px 16px;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .theme-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
     }
 
     h1 {
       font-size: 1.8rem;
       font-weight: 700;
-      background: linear-gradient(135deg, #58a6ff, #bc8cff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      color: var(--text);
       margin-bottom: 4px
     }
 
     .subtitle {
       color: var(--muted);
       font-size: .95rem;
-      margin-bottom: 28px
     }
 
     .container {
@@ -70,7 +101,7 @@
     .upload-zone:hover,
     .upload-zone.drag {
       border-color: var(--accent);
-      background: #1a2130
+      background: var(--card)
     }
 
     .upload-icon {
@@ -94,7 +125,8 @@
     .file-name {
       margin-top: 12px;
       padding: 8px 14px;
-      background: #0d1117;
+      background: var(--bg);
+      border: 1px solid var(--border);
       border-radius: 8px;
       font-size: .85rem;
       color: var(--accent);
@@ -1414,22 +1446,26 @@
 
 <body>
   <div class="container">
-    <h1>🎼 Melody Similarity</h1>
-    <p class="subtitle">Upload audio, sistem akan mendeteksi nada dan mencari lagu yang melodinya mirip di database.</p>
+    <div class="top-bar">
+      <div>
+        <h1>Melody Similarity</h1>
+        <p class="subtitle">Unggah audio atau masukkan link YouTube untuk menemukan lagu dengan melodi yang mirip.</p>
+      </div>
+      <button type="button" id="themeToggleBtn" class="theme-btn" onclick="toggleThemeMode()">Mode Terang</button>
+    </div>
 
     <!-- Input tabs -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button id="tabFile" class="tab-btn tab-active" onclick="setTab('file')">📁 File Audio</button>
-      <button id="tabUrl" class="tab-btn tab-inactive" onclick="setTab('url')">▶ Link YouTube</button>
+      <button id="tabFile" class="tab-btn tab-active" onclick="setTab('file')">File Audio</button>
+      <button id="tabUrl" class="tab-btn tab-inactive" onclick="setTab('url')">Link YouTube</button>
     </div>
 
     <!-- File upload -->
     <div id="paneFile">
       <div class="upload-zone" id="dropZone">
         <input type="file" id="fileInput" accept=".mp3,.wav,.flac,.m4a,.ogg,.aac,.opus,.wma">
-        <div class="upload-icon">🎵</div>
         <div style="font-size:1rem;font-weight:600">Klik atau seret file audio ke sini</div>
-        <p>Format: MP3 · WAV · FLAC · M4A · OGG · AAC</p>
+        <p>Format didukung: MP3, WAV, FLAC, M4A, OGG, AAC</p>
         <div class="file-name" id="fileName"></div>
       </div>
     </div>
@@ -1438,10 +1474,10 @@
     <div id="paneUrl" style="display:none">
       <div
         style="background:var(--surface);border:2px dashed var(--border);border-radius:var(--radius);padding:24px 20px">
-        <div style="font-size:1rem;font-weight:600;margin-bottom:10px">▶ Masukkan link YouTube</div>
+        <div style="font-size:1rem;font-weight:600;margin-bottom:10px">Masukkan link YouTube</div>
         <input id="ytUrl" type="url" placeholder="https://youtu.be/..."
-          style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:#0d1117;color:var(--text);font-size:.95rem;outline:none">
-        <p style="color:var(--muted);font-size:.82rem;margin-top:8px">Audio akan didownload otomatis sebelum dianalisis.
+          style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:16px;outline:none">
+        <p style="color:var(--muted);font-size:.82rem;margin-top:8px">Audio akan diunduh otomatis sebelum dianalisis.
         </p>
       </div>
     </div>
@@ -1459,7 +1495,7 @@
       <div class="setting-group">
         <label>Perangkat (Device)</label>
         <select id="deviceSelect"
-          style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:#0d1117;color:var(--text);font-size:.95rem;outline:none;margin-top:2px;cursor:pointer">
+          style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.95rem;outline:none;margin-top:2px;cursor:pointer">
           <option value="auto">Auto (GPU jika ada)</option>
           <option value="gpu">GPU (CUDA)</option>
           <option value="cpu">CPU</option>
@@ -1469,7 +1505,7 @@
     </div>
 
     <button class="btn btn-primary" id="submitBtn" disabled onclick="submitQuery()">
-      <span id="btnIcon">🔍</span> <span id="btnText">Pilih file untuk mulai</span>
+      <span id="btnIcon"></span> <span id="btnText">Pilih file untuk mulai</span>
     </button>
 
     <!-- Loading -->
@@ -2447,6 +2483,21 @@
       document.getElementById('segCards').innerHTML = '';
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+
+    function applyThemeMode(mode) {
+      document.documentElement.setAttribute('data-theme', mode);
+      const btn = document.getElementById('themeToggleBtn');
+      if (btn) btn.textContent = mode === 'light' ? 'Mode Gelap' : 'Mode Terang';
+    }
+
+    function toggleThemeMode() {
+      const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      const next = current === 'light' ? 'dark' : 'light';
+      localStorage.setItem('melody-theme', next);
+      applyThemeMode(next);
+    }
+
+    applyThemeMode(localStorage.getItem('melody-theme') === 'light' ? 'light' : 'dark');
   </script>
 </body>
 
